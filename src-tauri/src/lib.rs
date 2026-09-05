@@ -8,6 +8,7 @@ mod models;
 mod netlist;
 mod project;
 mod reliability;
+mod sdk_adapter;
 mod simulation;
 mod simulation_binding;
 
@@ -229,6 +230,24 @@ fn run_erc(state: State<'_, AppState>) -> Result<crate::erc::ErcReport, String> 
     Ok(crate::erc::check(&workspace.project))
 }
 #[tauri::command]
+fn inspect_sdk_adapter(
+    pack_sha256: String,
+    adapter_id: String,
+    root_path: String,
+    state: State<'_, AppState>,
+) -> Result<sdk_adapter::SdkAdapterReport, String> {
+    let workspace = state
+        .workspace
+        .lock()
+        .map_err(|_| "Workspace lock was poisoned".to_owned())?;
+    sdk_adapter::inspect(
+        &workspace.project,
+        &pack_sha256,
+        &adapter_id,
+        &PathBuf::from(root_path),
+    )
+}
+#[tauri::command]
 fn simulation_status(configured_path: Option<String>, state: State<'_, AppState>) -> BackendStatus {
     state.simulator.status(configured_path.as_deref())
 }
@@ -311,6 +330,7 @@ pub fn run() {
             import_spice_library,
             import_device_pack,
             run_erc,
+            inspect_sdk_adapter,
             export_waveform,
             simulation_status,
             run_simulation,

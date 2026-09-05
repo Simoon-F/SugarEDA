@@ -8,6 +8,7 @@ import type {
   SimulationResult,
   Snapshot,
   ErcReport,
+  SdkAdapterReport,
 } from "./types";
 export const isDesktop = () => "__TAURI_INTERNALS__" in window;
 export const api = {
@@ -35,6 +36,16 @@ export const api = {
   importDevicePack: (path: string) =>
     invoke<Snapshot>("import_device_pack", { path }),
   erc: () => invoke<ErcReport>("run_erc"),
+  inspectSdkAdapter: (
+    packSha256: string,
+    adapterId: string,
+    rootPath: string,
+  ) =>
+    invoke<SdkAdapterReport>("inspect_sdk_adapter", {
+      packSha256,
+      adapterId,
+      rootPath,
+    }),
   exportWaveform: (path: string, csv: string) =>
     invoke<void>("export_waveform", { path, csv }),
   status: (configuredPath?: string) =>

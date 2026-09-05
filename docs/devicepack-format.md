@@ -92,7 +92,9 @@ DevicePack 是 SugarEDA 的厂商无关、纯数据器件包。文件名使用 `
 
 ### `sdkAdapters[]` 与 `documents[]`
 
-SDK Adapter 包含 `id`、`sdkType`、`versionRequirement`、安全的相对 `localPathPatterns` 和字符串 `metadata`。禁止绝对路径、`..`、命令替换、脚本或可执行代码，本阶段不会打开或执行这些路径。
+SDK Adapter 包含 `id`、`sdkType`、`versionRequirement`、安全的相对 `localPathPatterns` 和字符串 `metadata`。禁止绝对路径、`..`、递归通配符、任意部分名称通配符、命令替换、脚本或可执行代码。
+
+用户可以在器件包管理器中显式选择一个本地 SDK 根目录进行只读结构匹配。匹配器只支持作为完整路径段的 `*` 和受限文件后缀形式 `*.ext`，限制最多访问 10,000 个目录项、每个模式返回 128 个结果，并忽略逃出所选根目录的符号链接。它不读取 SDK 文件内容、不执行工具、不推断版本，也不把本地绝对路径写入 `.sugeda`。结果中的 `pathMetadataOnly` 仅表示目录结构与元数据模式匹配，不能描述为 SDK 兼容或 Device Tree 配置已经验证。
 
 文档仅保存 `kind`、`title`、HTTP(S) `sourceUrl`、`revision` 和 `license` 来源元数据，导入时不下载 URL。
 

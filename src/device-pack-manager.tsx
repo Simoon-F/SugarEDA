@@ -1,9 +1,22 @@
 import { useMemo, useState } from "react";
-import { Box, Check, Cpu, FileUp, Search, ShieldCheck, X } from "lucide-react";
+import {
+  Box,
+  Check,
+  Cpu,
+  FileUp,
+  FolderSearch,
+  Search,
+  ShieldCheck,
+  X,
+} from "lucide-react";
 import type { ComponentPlacement, Project } from "./types";
 import { useI18n } from "./i18n";
 import { deviceCapabilities } from "./device-pack";
 import { DeviceUnitActions } from "./device-unit-actions";
+import {
+  SdkAdapterInspector,
+  type SdkInspectionTarget,
+} from "./sdk-adapter-inspector";
 
 type Props = {
   open: boolean;
@@ -25,6 +38,7 @@ export function DevicePackManager({
   const [query, setQuery] = useState("");
   const [vendor, setVendor] = useState("all");
   const [type, setType] = useState("all");
+  const [sdkTarget, setSdkTarget] = useState<SdkInspectionTarget | null>(null);
   const entries = useMemo(
     () =>
       packs.flatMap((pack) =>
@@ -160,6 +174,9 @@ export function DevicePackManager({
             const units = symbol?.units.length
               ? symbol.units
               : [{ id: "", name: "Main", groups: [] }];
+            const sdkAdapters = pack.pack.sdkAdapters.filter((adapter) =>
+              device.sdkAdapterIds.includes(adapter.id),
+            );
             return (
               <article
                 className="pack-card"
@@ -220,6 +237,24 @@ export function DevicePackManager({
                       ? "已验证并嵌入工程"
                       : "Validated and embedded in project"}
                   </div>
+                  {sdkAdapters.length > 0 && (
+                    <button
+                      className="sdk-inspect-button"
+                      onClick={() =>
+                        setSdkTarget({
+                          packSha256: pack.sha256,
+                          packName: pack.pack.manifest.name,
+                          deviceName: device.name,
+                          adapters: sdkAdapters,
+                        })
+                      }
+                    >
+                      <FolderSearch />
+                      {language === "zh-CN"
+                        ? "匹配本地 SDK"
+                        : "Match local SDK"}
+                    </button>
+                  )}
                 </div>
                 <DeviceUnitActions
                   project={project}
@@ -238,6 +273,11 @@ export function DevicePackManager({
           })}
         </div>
       </section>
+      <SdkAdapterInspector
+        target={sdkTarget}
+        language={language}
+        onClose={() => setSdkTarget(null)}
+      />
     </div>
   );
 }

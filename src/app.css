@@ -344,6 +344,23 @@ body.component-dragging {
 .trust-note svg {
   width: 13px;
 }
+.sdk-inspect-button {
+  height: 28px;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  margin-top: 8px;
+  padding: 0 8px;
+  color: #7a520f;
+  background: #fff8e9;
+  border: 1px solid #eddfbd;
+  border-radius: 7px;
+  font-size: 10px;
+  font-weight: 650;
+}
+.sdk-inspect-button svg {
+  width: 13px;
+}
 .unit-actions {
   display: grid;
   gap: 5px;

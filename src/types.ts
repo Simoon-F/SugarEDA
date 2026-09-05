@@ -203,6 +203,23 @@ export type ErcReport = {
   checkedDevices: number;
   checkedPins: number;
 };
+export type SdkAdapterIssue = {
+  code: string;
+  severity: "error" | "warning" | "info";
+  messageZh: string;
+  messageEn: string;
+};
+export type SdkAdapterReport = {
+  packSha256: string;
+  adapterId: string;
+  sdkType: string;
+  versionRequirement: string;
+  selectedRoot: string;
+  verificationLevel: "pathMetadataOnly";
+  matched: boolean;
+  patterns: { pattern: string; matches: string[] }[];
+  issues: SdkAdapterIssue[];
+};
 export type Wire = { id: string; points: Point[] };
 export type NetLabel = { id: string; name: string; position: Point };
 export type Analysis =

@@ -709,9 +709,10 @@ pub fn validate(pack: &DevicePack) -> Result<(), DevicePackError> {
             || !text(&adapter.sdk_type)
             || !text(&adapter.version_requirement)
             || adapter.local_path_patterns.len() > 32
-            || adapter.local_path_patterns.iter().any(|v| {
-                !text(v) || v.contains("..") || v.starts_with(['/', '\\']) || v.contains(['`', '$'])
-            })
+            || adapter
+                .local_path_patterns
+                .iter()
+                .any(|pattern| !crate::sdk_adapter::safe_pattern(pattern))
         {
             return Err(DevicePackError::Unsafe(format!(
                 "SDK adapter '{}' contains an unsafe local path pattern",
