@@ -20,6 +20,22 @@ pub enum BoardConfigurationSourceFormat {
     DeviceTreeSubset,
 }
 
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub enum BoardConfigurationExportFormat {
+    Json,
+    DeviceTreeSubset,
+}
+
+#[derive(Debug, Clone, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct BoardConfigurationExportReceipt {
+    pub path: String,
+    pub format: BoardConfigurationExportFormat,
+    pub bytes_written: usize,
+    pub sha256: String,
+}
+
 #[derive(Debug, Clone, Serialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
 pub struct BoardConfigurationCheckReport {

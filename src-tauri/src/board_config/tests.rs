@@ -1,4 +1,7 @@
-use super::{check_all, load_for_instance, BoardConfigurationSourceFormat};
+use super::{
+    build_from_draft, check_all, export_configuration, load_for_instance,
+    BoardConfigurationExportFormat, BoardConfigurationSourceFormat,
+};
 use crate::{
     application::Workspace,
     domain::{Point, Project},
@@ -167,4 +170,43 @@ fn rejects_unsafe_persisted_source_metadata() {
     configuration.source_name = "valid.device-config.json".into();
     configuration.source_sha256 = "A".repeat(64);
     assert!(super::validate_project_candidate(&project, &configuration).is_err());
+}
+
+#[test]
+fn visual_draft_survives_undo_save_reopen_and_export_reimport() {
+    let (project, instance_id) = project_with_mcu();
+    let config = crate::device_config::parse_ir(include_bytes!(
+        "../../../examples/device-configs/test-mcu-valid.device-config.json"
+    ))
+    .unwrap();
+    let configuration = build_from_draft(&project, instance_id, config.clone()).unwrap();
+    let mut workspace = Workspace::new(project);
+    workspace.upsert_board_configuration(configuration).unwrap();
+    assert_eq!(workspace.project.board_configurations.len(), 1);
+    assert!(workspace.undo());
+    assert!(workspace.project.board_configurations.is_empty());
+    assert!(workspace.redo());
+
+    let directory = tempfile::tempdir().unwrap();
+    let project_path = directory.path().join("visual-editor.sugeda");
+    crate::project::save(&project_path, &workspace.project).unwrap();
+    let reopened = crate::project::load(&project_path).unwrap();
+    assert_eq!(reopened.board_configurations[0].config, config);
+
+    let export_path = directory.path().join("u1.device-config.json");
+    export_configuration(
+        &reopened,
+        reopened.board_configurations[0].id,
+        &export_path,
+        BoardConfigurationExportFormat::Json,
+    )
+    .unwrap();
+    let reimported = load_for_instance(
+        &reopened,
+        instance_id,
+        &export_path,
+        BoardConfigurationSourceFormat::Json,
+    )
+    .unwrap();
+    assert_eq!(reimported.config, reopened.board_configurations[0].config);
 }

@@ -170,6 +170,11 @@ body.component-dragging {
   border-color: var(--orange) !important;
   font-weight: 650;
 }
+.pack-import.secondary {
+  color: #174f75;
+  background: #edf6fb;
+  border-color: #bdd9e8 !important;
+}
 .pack-close {
   width: 36px;
   justify-content: center;

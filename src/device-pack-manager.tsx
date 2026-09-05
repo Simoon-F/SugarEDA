@@ -4,7 +4,9 @@ import {
   Check,
   Cpu,
   FileUp,
+  FileKey2,
   FolderSearch,
+  PenTool,
   ScanSearch,
   Search,
   ShieldCheck,
@@ -25,6 +27,8 @@ import {
 } from "./device-config-inspector";
 import { deviceConfigurationScope } from "./device-configuration";
 import { deviceConfigCanvasInstances } from "./device-config-location";
+import { DevicePackAuthoringEditor } from "./device-pack-authoring-editor";
+import { DevicePackSignatureInspector } from "./device-pack-signature-inspector";
 
 type Props = {
   open: boolean;
@@ -56,6 +60,8 @@ export function DevicePackManager({
   const [configTarget, setConfigTarget] = useState<DeviceConfigTarget | null>(
     null,
   );
+  const [authoringOpen, setAuthoringOpen] = useState(false);
+  const [signatureOpen, setSignatureOpen] = useState(false);
   const entries = useMemo(
     () =>
       packs.flatMap((pack) =>
@@ -106,6 +112,20 @@ export function DevicePackManager({
             </div>
           </div>
           <div className="pack-manager-actions">
+            <button
+              className="pack-import secondary"
+              onClick={() => setAuthoringOpen(true)}
+            >
+              <PenTool />
+              {language === "zh-CN" ? "制作器件包" : "Author DevicePack"}
+            </button>
+            <button
+              className="pack-import secondary"
+              onClick={() => setSignatureOpen(true)}
+            >
+              <FileKey2 />
+              {language === "zh-CN" ? "验证签名" : "Verify signature"}
+            </button>
             <button className="pack-import" onClick={onImport}>
               <FileUp />
               {t("Import device pack")}
@@ -367,6 +387,16 @@ export function DevicePackManager({
           onLocate(componentId);
         }}
         onImported={onSnapshot}
+      />
+      <DevicePackAuthoringEditor
+        open={authoringOpen}
+        language={language}
+        onClose={() => setAuthoringOpen(false)}
+      />
+      <DevicePackSignatureInspector
+        open={signatureOpen}
+        language={language}
+        onClose={() => setSignatureOpen(false)}
       />
     </div>
   );

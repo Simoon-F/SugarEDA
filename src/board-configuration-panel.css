@@ -90,7 +90,7 @@
 .board-config-row {
   min-height: 34px;
   display: grid;
-  grid-template-columns: 24px 70px minmax(150px, 1fr) 76px 80px 28px 28px;
+  grid-template-columns: 24px 70px minmax(150px, 1fr) 76px 80px 28px 28px 28px;
   gap: 7px;
   align-items: center;
   padding: 4px 7px;
@@ -171,7 +171,7 @@
 }
 @media (max-width: 780px) {
   .board-config-row {
-    grid-template-columns: 24px 60px minmax(100px, 1fr) 28px 28px;
+    grid-template-columns: 24px 60px minmax(100px, 1fr) 28px 28px 28px;
   }
   .board-config-row > code {
     display: none;

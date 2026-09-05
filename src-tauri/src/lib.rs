@@ -1,8 +1,11 @@
+pub mod adapter_contract;
 mod application;
 mod board_config;
 mod device_config;
 mod device_instance;
 mod device_pack;
+mod device_pack_authoring;
+mod device_pack_signature;
 mod device_tree_adapter;
 mod domain;
 mod erc;
@@ -15,7 +18,13 @@ mod sdk_adapter;
 mod simulation;
 mod simulation_binding;
 
+use adapter_contract::validate_adapter_contract;
 use application::{EditorCommand, Workspace, WorkspaceSnapshot};
+use board_config::{
+    apply_board_configuration_draft, export_board_configuration, validate_board_configuration_draft,
+};
+use device_pack_authoring::{export_device_pack_draft, validate_device_pack_draft};
+use device_pack_signature::inspect_device_pack_signature;
 use domain::Project;
 use simulation::{BackendStatus, NgSpiceBackend, SimulationBackend, SimulationResult};
 use std::{path::PathBuf, sync::Mutex};
@@ -321,6 +330,7 @@ fn check_board_configurations(
         .map_err(|_| "Workspace lock was poisoned".to_owned())?;
     board_config::check_all(&workspace.project)
 }
+
 #[tauri::command]
 fn simulation_status(configured_path: Option<String>, state: State<'_, AppState>) -> BackendStatus {
     state.simulator.status(configured_path.as_deref())
@@ -403,12 +413,19 @@ pub fn run() {
             simulation_check,
             import_spice_library,
             import_device_pack,
+            validate_device_pack_draft,
+            export_device_pack_draft,
+            inspect_device_pack_signature,
+            validate_adapter_contract,
             run_erc,
             inspect_sdk_adapter,
             check_device_config,
             check_device_tree_config,
             import_board_configuration,
             check_board_configurations,
+            validate_board_configuration_draft,
+            apply_board_configuration_draft,
+            export_board_configuration,
             export_waveform,
             simulation_status,
             run_simulation,

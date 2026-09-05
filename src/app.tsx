@@ -12,6 +12,7 @@ import { RecoveryDialog, UnsavedChangesDialog } from "./reliability-dialogs";
 import { DevicePackManager } from "./device-pack-manager";
 import { ErcPanel } from "./erc-panel";
 import { BoardConfigurationPanel } from "./board-configuration-panel";
+import { BoardConfigurationEditor } from "./board-configuration-editor";
 import { locateProjectBoardConfigurationIssue } from "./device-config-location";
 import { placeLocalDeviceUnit } from "./device-unit-factory";
 import { removeOrphanDeviceInstances } from "./device-instance";
@@ -291,6 +292,10 @@ function App() {
   const [boardConfigurationChecking, setBoardConfigurationChecking] =
     useState(false);
   const [packManagerOpen, setPackManagerOpen] = useState(false);
+  const [boardEditorInstanceId, setBoardEditorInstanceId] = useState<
+    string | null
+  >(null);
+  const [boardEditorOpen, setBoardEditorOpen] = useState(false);
   const [focusRequest, setFocusRequest] = useState<{
     componentId: string;
     nonce: number;
@@ -1857,6 +1862,10 @@ function App() {
                 onRemove={(id) => {
                   void command({ action: "removeBoardConfiguration", id });
                 }}
+                onEdit={(logicalInstanceId) => {
+                  setBoardEditorInstanceId(logicalInstanceId ?? null);
+                  setBoardEditorOpen(true);
+                }}
                 onOpenManager={() => setPackManagerOpen(true)}
               />
             )}{" "}
@@ -1999,6 +2008,21 @@ function App() {
         onRemovePack={(packSha256) =>
           void command({ action: "removeDevicePack", packSha256 })
         }
+      />
+      <BoardConfigurationEditor
+        open={boardEditorOpen}
+        project={snapshot.project}
+        initialInstanceId={boardEditorInstanceId}
+        language={language}
+        onClose={() => {
+          setBoardEditorOpen(false);
+          setBoardEditorInstanceId(null);
+        }}
+        onApplied={(next) => {
+          setBoardConfigurationReport(null);
+          acceptSnapshot(next);
+        }}
+        onLocate={locateBoardConfigurationIssue}
       />
     </div>
   );

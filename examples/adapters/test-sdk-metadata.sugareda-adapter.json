@@ -1,0 +1,19 @@
+{
+  "contractVersion": 1,
+  "id": "org.sugareda.test.sdk-metadata-adapter",
+  "name": "SugarEDA Test SDK Metadata Adapter Contract",
+  "vendor": "SugarEDA Test Devices",
+  "version": "1.0.0",
+  "license": "CC0-1.0",
+  "source": "SugarEDA self-contained fictional test metadata; no SDK or executable included",
+  "adapterKind": "sdkMetadataBridge",
+  "inputKinds": ["selectedSdkRootMetadataV1"],
+  "outputKind": "deviceConfigurationIrV1",
+  "supportedPackIds": ["org.sugareda.test.mcu"],
+  "permissions": {
+    "selectedSdkRootRead": true,
+    "projectFilesRead": false,
+    "networkAccess": false,
+    "processExecution": false
+  }
+}

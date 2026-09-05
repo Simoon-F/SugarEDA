@@ -12,7 +12,15 @@ import type {
   DeviceTreeAdapterReport,
   SdkAdapterReport,
   BoardConfigurationCheckReport,
+  BoardConfigurationExportFormat,
+  BoardConfigurationExportReceipt,
   BoardConfigurationSourceFormat,
+  DeviceConfigurationData,
+  DevicePack,
+  DevicePackAuthoringReport,
+  DevicePackExportReceipt,
+  DevicePackSignatureReport,
+  AdapterContractReport,
 } from "./types";
 export const isDesktop = () => "__TAURI_INTERNALS__" in window;
 export const api = {
@@ -39,6 +47,17 @@ export const api = {
     invoke<Snapshot>("import_spice_library", { path }),
   importDevicePack: (path: string) =>
     invoke<Snapshot>("import_device_pack", { path }),
+  validateDevicePackDraft: (pack: DevicePack) =>
+    invoke<DevicePackAuthoringReport>("validate_device_pack_draft", { pack }),
+  exportDevicePackDraft: (pack: DevicePack, path: string) =>
+    invoke<DevicePackExportReceipt>("export_device_pack_draft", { pack, path }),
+  inspectDevicePackSignature: (packPath: string, signaturePath: string) =>
+    invoke<DevicePackSignatureReport>("inspect_device_pack_signature", {
+      packPath,
+      signaturePath,
+    }),
+  validateAdapterContract: (path: string) =>
+    invoke<AdapterContractReport>("validate_adapter_contract", { path }),
   erc: () => invoke<ErcReport>("run_erc"),
   inspectSdkAdapter: (
     packSha256: string,
@@ -74,6 +93,32 @@ export const api = {
     }),
   checkBoardConfigurations: () =>
     invoke<BoardConfigurationCheckReport>("check_board_configurations"),
+  validateBoardConfigurationDraft: (
+    logicalInstanceId: string,
+    config: DeviceConfigurationData,
+  ) =>
+    invoke<DeviceConfigReport>("validate_board_configuration_draft", {
+      logicalInstanceId,
+      config,
+    }),
+  applyBoardConfigurationDraft: (
+    logicalInstanceId: string,
+    config: DeviceConfigurationData,
+  ) =>
+    invoke<Snapshot>("apply_board_configuration_draft", {
+      logicalInstanceId,
+      config,
+    }),
+  exportBoardConfiguration: (
+    configurationId: string,
+    path: string,
+    format: BoardConfigurationExportFormat,
+  ) =>
+    invoke<BoardConfigurationExportReceipt>("export_board_configuration", {
+      configurationId,
+      path,
+      format,
+    }),
   exportWaveform: (path: string, csv: string) =>
     invoke<void>("export_waveform", { path, csv }),
   status: (configuredPath?: string) =>

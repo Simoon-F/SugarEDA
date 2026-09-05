@@ -17,9 +17,13 @@
 - 动态器件库与多单元分组符号，支持小型器件和大型 BGA。
 - ERC 覆盖必接/电源引脚、输出冲突、电压域、差分对和显式 No Connect。
 - L1/L2 数据基础、受限内嵌 SPICE L3，以及 IBIS/S 参数和 SDK Adapter 的 L4/L5 元数据接口。
-- 厂商无关配置 JSON 与受限 DTS 子集可绑定到逻辑器件，规范化后随 schema v4 工程保存，并做项目级 PinMux、启动、电压域、功能组、互斥和依赖检查与画布定位。
+- 厂商无关配置可通过可视化编辑器或 JSON/受限 DTS 导入绑定到逻辑器件，规范化后随 schema v4 工程保存；支持 Rust 实时规则检查、画布定位、撤销和确定性导出。
 - 未使用的器件包可从工程安全移除；仍被实例引用时拒绝，操作支持撤销。
 - 三个 CC0 虚构测试包：模拟器件、带 PinMux 的 MCU、144 球多电源域 SoC。
+- 可视化 DevicePack L1/L2/L5 制作基础、Rust 权威导出和 Ed25519 分离签名验证；未知公钥不会被标记为可信厂商。
+
+可视化配置编辑器的交互、模块和安全边界见 [P3 第八阶段文档](docs/p3-phase8-visual-board-configuration-editor.md)。
+器件包制作、签名格式和无执行 Adapter 契约见 [P3 第九阶段文档](docs/p3-phase9-devicepack-authoring-and-adapter-contract.md)。
 
 ### 原理图编辑
 
@@ -154,6 +158,9 @@ src/                         React 工作台、Canvas 原理图和波形界面
 src-tauri/src/application.rs Rust 编辑命令、Undo/Redo 与工作区状态
 src-tauri/src/project.rs     项目校验和原子保存
 src-tauri/src/board_config/  板级配置来源、验证、持久化和项目级检查
+src-tauri/src/device_pack_authoring/ 器件包草稿校验和原子导出
+src-tauri/src/device_pack_signature/ Ed25519 分离签名验证
+src-tauri/src/adapter_contract/ 无执行的授权 Adapter v1 数据契约
 src-tauri/src/device_config/ 厂商无关配置 IR 与语义规则
 src-tauri/src/device_tree_adapter/ 受限 DTS 子集解析与 IR 转换
 src-tauri/src/reliability.rs 自动恢复与最近项目
@@ -166,7 +173,8 @@ scripts/desktop-smoke.mjs    真实桌面 WebDriver 冒烟测试
 ## 当前边界
 
 - 当前一次编辑一张原理图。
-- L5 当前只接受 SugarEDA 配置 JSON 与独立 DTS 子集；不解析通用 DTS、厂商 SDK 或 Device Tree include。
+- L5 提供 Rust 权威实时校验、可视化 PinMux/启动/电压配置和确定性 JSON/独立 DTS 子集导出；不解析通用 DTS、厂商 SDK 或 Device Tree include。
+- Adapter Contract v1 仅验证清单和数据 DTO，明确不执行进程、动态库或脚本；签名有效也不等于发布者身份受信任。
 - 波形数据仍通过 Tauri JSON 命令边界传输；后续可替换为通道或二进制结果文件。
 - Windows/macOS 已配置桌面打包；Linux 主要用于自动化测试，发布包仍需单独验证。
 - 外部 `.include`、任意引脚映射、IBIS、加密厂商模型和自动下载尚未实现。

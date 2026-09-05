@@ -3,7 +3,9 @@ import {
   CheckCircle2,
   Crosshair,
   FileCog,
+  PencilLine,
   RefreshCw,
+  SlidersHorizontal,
   Trash2,
 } from "lucide-react";
 import type { BoardConfigurationCheckReport, Project } from "./types";
@@ -17,6 +19,7 @@ type Props = {
   onCheck: () => void;
   onLocate: (logicalInstanceId: string, pinId?: string | null) => void;
   onRemove: (configurationId: string) => void;
+  onEdit: (logicalInstanceId?: string) => void;
   onOpenManager: () => void;
 };
 
@@ -28,6 +31,7 @@ export function BoardConfigurationPanel({
   onCheck,
   onLocate,
   onRemove,
+  onEdit,
   onOpenManager,
 }: Props) {
   const zh = language === "zh-CN";
@@ -75,9 +79,13 @@ export function BoardConfigurationPanel({
           </div>
         </div>
         <div className="board-config-actions">
+          <button className="secondary" onClick={() => onEdit()}>
+            <SlidersHorizontal />
+            {zh ? "编辑配置" : "Edit configurations"}
+          </button>
           <button className="secondary" onClick={onOpenManager}>
             <FileCog />
-            {zh ? "管理配置" : "Manage"}
+            {zh ? "器件包" : "DevicePacks"}
           </button>
           <button onClick={onCheck} disabled={checking}>
             <RefreshCw className={checking ? "spin" : ""} />
@@ -120,6 +128,7 @@ export function BoardConfigurationPanel({
                 valid={null}
                 language={language}
                 onLocate={() => onLocate(configuration.logicalInstanceId)}
+                onEdit={() => onEdit(configuration.logicalInstanceId)}
                 onRemove={() => onRemove(configuration.id)}
               />
             );
@@ -129,12 +138,12 @@ export function BoardConfigurationPanel({
           <button
             className="board-config-missing"
             key={item.logicalInstanceId}
-            onClick={() => onLocate(item.logicalInstanceId)}
+            onClick={() => onEdit(item.logicalInstanceId)}
           >
             <AlertTriangle />
             <code>{item.code}</code>
             <span>{zh ? item.messageZh : item.messageEn}</span>
-            <Crosshair />
+            <SlidersHorizontal />
           </button>
         ))}
 
@@ -156,6 +165,7 @@ export function BoardConfigurationPanel({
                 valid={entry.report.valid}
                 language={language}
                 onLocate={() => onLocate(entry.logicalInstanceId)}
+                onEdit={() => onEdit(entry.logicalInstanceId)}
                 onRemove={() => onRemove(entry.boardConfigurationId)}
               />
               {entry.report.issues.map((issue, index) => (
@@ -186,6 +196,7 @@ function ConfigurationRow({
   valid,
   language,
   onLocate,
+  onEdit,
   onRemove,
 }: {
   id: string;
@@ -196,6 +207,7 @@ function ConfigurationRow({
   valid: boolean | null;
   language: "zh-CN" | "en";
   onLocate: () => void;
+  onEdit: () => void;
   onRemove: () => void;
 }) {
   const zh = language === "zh-CN";
@@ -214,6 +226,9 @@ function ConfigurationRow({
       <code title={hash}>{hash ? hash.slice(0, 10) : "—"}</code>
       <button onClick={onLocate} title={zh ? "定位器件" : "Locate device"}>
         <Crosshair />
+      </button>
+      <button onClick={onEdit} title={zh ? "编辑配置" : "Edit configuration"}>
+        <PencilLine />
       </button>
       <button
         className="remove"

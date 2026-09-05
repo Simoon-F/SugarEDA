@@ -213,6 +213,55 @@ export type DevicePack = {
   }[];
 };
 export type EmbeddedDevicePack = { sha256: string; pack: DevicePack };
+export type DevicePackAuthoringReport = {
+  valid: boolean;
+  packSha256?: string | null;
+  deviceCount: number;
+  pinCount: number;
+  issues: { code: string; message: string }[];
+};
+export type DevicePackExportReceipt = {
+  path: string;
+  bytesWritten: number;
+  packSha256: string;
+};
+export type DevicePackSignatureReport = {
+  verified: boolean;
+  trustedIdentity: boolean;
+  algorithm: string;
+  keyId: string;
+  signer: string;
+  packSha256: string;
+  code: string;
+  messageZh: string;
+  messageEn: string;
+};
+export type AdapterContractReport = {
+  valid: boolean;
+  executionAvailable: boolean;
+  manifest?: {
+    contractVersion: number;
+    id: string;
+    name: string;
+    vendor: string;
+    version: string;
+    license: string;
+    source: string;
+    adapterKind: string;
+    inputKinds: string[];
+    outputKind: string;
+    supportedPackIds: string[];
+    permissions: {
+      selectedSdkRootRead: boolean;
+      projectFilesRead: boolean;
+      networkAccess: boolean;
+      processExecution: boolean;
+    };
+  } | null;
+  code: string;
+  messageZh: string;
+  messageEn: string;
+};
 export type ErcIssue = {
   code: string;
   severity: string;
@@ -306,6 +355,13 @@ export type DeviceConfigurationData = {
   voltageSelections: { domainId: string; voltage: number }[];
 };
 export type BoardConfigurationSourceFormat = "json" | "deviceTreeSubset";
+export type BoardConfigurationExportFormat = "json" | "deviceTreeSubset";
+export type BoardConfigurationExportReceipt = {
+  path: string;
+  format: BoardConfigurationExportFormat;
+  bytesWritten: number;
+  sha256: string;
+};
 export type BoardConfiguration = {
   id: string;
   logicalInstanceId: string;
