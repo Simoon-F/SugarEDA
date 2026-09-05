@@ -78,8 +78,25 @@ pub struct DeviceDefinition {
     pub rules: Vec<DeviceRule>,
     #[serde(default)]
     pub model_ids: Vec<String>,
+    /// Explicit SPICE model-port to logical device-pin mappings.
+    #[serde(default)]
+    pub spice_bindings: Vec<SpiceDeviceBinding>,
     #[serde(default)]
     pub sdk_adapter_ids: Vec<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct SpiceDeviceBinding {
+    pub model_id: String,
+    pub ports: Vec<SpicePortBinding>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct SpicePortBinding {
+    pub model_port: String,
+    pub pin_id: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -602,6 +619,8 @@ pub fn validate(pack: &DevicePack) -> Result<(), DevicePackError> {
                 ),
             ));
         }
+        crate::simulation_binding::validate_device_metadata(pack, device)
+            .map_err(|issue| invalid(issue.code, issue.message))?;
     }
     if total_pins > MAX_TOTAL_PINS {
         return Err(invalid(
@@ -1043,6 +1062,22 @@ mod tests {
         ] {
             assert!(import_bytes(bytes).is_ok());
         }
+    }
+
+    #[test]
+    fn rejects_incomplete_multi_unit_spice_port_mapping() {
+        let mut pack: DevicePack = serde_json::from_slice(include_bytes!(
+            "../../examples/devicepacks/test-analog.devicepack.json"
+        ))
+        .unwrap();
+        pack.devices[0].spice_bindings[0].ports.pop();
+        assert!(matches!(
+            validate(&pack),
+            Err(DevicePackError::Invalid {
+                code: "invalid_spice_binding",
+                ..
+            })
+        ));
     }
 
     #[test]

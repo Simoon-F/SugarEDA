@@ -196,6 +196,14 @@ const validationMessage = (item: object, language: "zh-CN" | "en") => {
       return `位号“${quoted[0] || ""}”无效或与元件类型不匹配。`;
     case "invalid_analysis":
       return "仿真参数无效：请检查步长、起止时间或扫描范围。";
+    case "simulation_binding.missing_pin":
+      return `逻辑器件 ${message.match(/Logical device\s+(\S+)/)?.[1] || ""} 尚未放置 SPICE 端口“${quoted[0] || "未知"}”对应的引脚。请从器件包管理器把缺少的符号单元加入同一器件实例。`;
+    case "simulation_binding.duplicate_pin":
+      return `逻辑器件的 SPICE 映射引脚被多个符号单元重复提供：${message.split(":").slice(1).join(":").trim() || message}`;
+    case "simulation_binding.model_unavailable":
+      return `器件的 SPICE 模型“${quoted[0] || "未知"}”不可用或已损坏。`;
+    case "simulation_binding.metadata_unavailable":
+      return "器件包中的 SPICE 绑定元数据不可用，请重新导入对应器件包。";
     default:
       return message;
   }

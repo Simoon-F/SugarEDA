@@ -154,6 +154,10 @@ export type DevicePack = {
     }[];
     rules: { id: string; kind: string; pinIds: string[]; message?: string }[];
     modelIds: string[];
+    spiceBindings?: {
+      modelId: string;
+      ports: { modelPort: string; pinId: string }[];
+    }[];
     sdkAdapterIds: string[];
   }[];
   symbols: {

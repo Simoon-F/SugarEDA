@@ -93,6 +93,18 @@
         }
       ],
       "modelIds": ["sta100-spice"],
+      "spiceBindings": [
+        {
+          "modelId": "sta100-spice",
+          "ports": [
+            { "modelPort": "INP", "pinId": "inp" },
+            { "modelPort": "INM", "pinId": "inm" },
+            { "modelPort": "VCC", "pinId": "vcc" },
+            { "modelPort": "VEE", "pinId": "vee" },
+            { "modelPort": "OUT", "pinId": "out" }
+          ]
+        }
+      ],
       "sdkAdapterIds": []
     }
   ],
@@ -104,7 +116,12 @@
         {
           "id": "a",
           "name": "Amplifier",
-          "groups": ["ANALOG", "POWER"]
+          "groups": ["ANALOG"]
+        },
+        {
+          "id": "power",
+          "name": "Power",
+          "groups": ["POWER"]
         }
       ]
     }

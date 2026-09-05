@@ -42,7 +42,7 @@ DevicePack 是 SugarEDA 的厂商无关、纯数据器件包。文件名使用 `
 
 ### `devices[]`
 
-每个器件包含 `id`、`name`、`deviceType`、`symbolId`、`packageId`、`variants`、`pins`、`voltageDomains`、`alternateFunctions`、`differentialPairs`、`rules`、`modelIds` 和 `sdkAdapterIds`。
+每个器件包含 `id`、`name`、`deviceType`、`symbolId`、`packageId`、`variants`、`pins`、`voltageDomains`、`alternateFunctions`、`differentialPairs`、`rules`、`modelIds`、可选 `spiceBindings` 和 `sdkAdapterIds`。
 
 - 引脚包含稳定 `id`、物理 `number`、可见 `name`、`group`、`electricalType`、`direction` 和可选 `voltageDomainId`。
 - `electricalType`：`passive`、`input`、`output`、`bidirectional`、`openDrain`、`openCollector`、`powerInput`、`powerOutput`、`noConnect`。
@@ -72,6 +72,24 @@ DevicePack 是 SugarEDA 的厂商无关、纯数据器件包。文件名使用 `
 - IBIS/S 参数在本阶段仅允许元数据，不接受模型载荷，直至存在专用安全导入器和求解边界。
 - 模型不能引用外部路径，删除原始包后工程仍须可移植。
 
+### `spiceBindings[]`
+
+`spiceBindings` 位于具体 device 上，把 SPICE 模型声明的端口显式映射到 DevicePack 的稳定 pin ID：
+
+```json
+{
+  "modelId": "sta100-spice",
+  "ports": [
+    { "modelPort": "INP", "pinId": "inp" },
+    { "modelPort": "VCC", "pinId": "vcc" }
+  ]
+}
+```
+
+映射必须覆盖模型声明的每个端口，端口名和 pin ID 均不得重复，且只能引用该 device 已启用的 SPICE 模型。多 unit 器件必须提供显式映射；单 unit 旧包仍可按模型端口名与 pin 名称/ID 的大小写无关精确匹配。
+
+仿真时，Rust `simulation_binding` 会跨同一 `logicalInstanceId` 收集已放置的 unit，按 SPICE 声明顺序生成一次器件实例。缺少 unit、映射引脚未放置或同一引脚被多个 unit 重复暴露时，仿真检查分别返回 `simulation_binding.missing_pin`、`simulation_binding.duplicate_pin` 等稳定错误，不会生成错误网表。
+
 ### `sdkAdapters[]` 与 `documents[]`
 
 SDK Adapter 包含 `id`、`sdkType`、`versionRequirement`、安全的相对 `localPathPatterns` 和字符串 `metadata`。禁止绝对路径、`..`、命令替换、脚本或可执行代码，本阶段不会打开或执行这些路径。
@@ -92,7 +110,7 @@ SDK Adapter 包含 `id`、`sdkType`、`versionRequirement`、安全的相对 `lo
 1. 从 [`examples/devicepacks`](../examples/devicepacks) 中最接近的自包含测试包开始。
 2. 选择稳定包 ID 和版本，记录真实来源及允许再分发的许可证。
 3. 完整列出物理 pad/pin，再增加电压域、复用功能、差分对和显式规则。
-4. 把大型符号拆成有意义的功能 unit。
+4. 把大型符号拆成有意义的功能 unit；如果器件具有 SPICE 模型，为每个模型补全 `spiceBindings`。
 5. 只嵌入获准再分发的 SPICE 文本；IBIS/S 参数暂记录为元数据。
 6. 在器件包管理器导入。错误会带 `invalid_pin`、`missing_reference`、`external_model_reference` 等稳定类别。
 

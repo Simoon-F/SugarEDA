@@ -255,6 +255,17 @@ pub fn generate(project: &Project) -> Result<String, Vec<NetlistError>> {
         }]
     })?;
     let mut errors = validate_components(project, sheet);
+    let resolved_devices = match crate::simulation_binding::resolve(project, sheet) {
+        Ok(devices) => devices,
+        Err(binding_issues) => {
+            errors.extend(binding_issues.into_iter().map(|issue| NetlistError {
+                code: issue.code,
+                message: issue.message,
+                component_id: issue.component_id,
+            }));
+            vec![]
+        }
+    };
     let profile = project.active_simulation_profile.and_then(|id| {
         project
             .simulation_profiles
@@ -521,7 +532,7 @@ pub fn generate(project: &Project) -> Result<String, Vec<NetlistError>> {
         .iter()
         .filter(|c| {
             !matches!(c.kind, ComponentKind::Ground | ComponentKind::NetLabel)
-                && (c.kind != ComponentKind::Device || c.model.is_some())
+                && c.kind != ComponentKind::Device
         })
         .collect();
     devices.sort_by(|a, b| a.spice_ref.cmp(&b.spice_ref));
@@ -532,6 +543,11 @@ pub fn generate(project: &Project) -> Result<String, Vec<NetlistError>> {
     let used_libraries: BTreeSet<_> = devices
         .iter()
         .filter_map(|component| component.model.as_ref().map(|model| model.library_id))
+        .chain(
+            resolved_devices
+                .iter()
+                .map(|device| device.model.library_id),
+        )
         .collect();
     for library in project
         .spice_libraries
@@ -568,6 +584,24 @@ pub fn generate(project: &Project) -> Result<String, Vec<NetlistError>> {
             component.spice_ref,
             nodes.join(" "),
             value
+        ));
+    }
+    for device in resolved_devices {
+        let nodes: Vec<_> = device
+            .pins
+            .iter()
+            .map(|bound| {
+                node(
+                    &mut uf,
+                    key(absolute_pin(bound.component, bound.pin.offset)),
+                )
+            })
+            .collect();
+        lines.push(format!(
+            "{} {} {}",
+            device.reference,
+            nodes.join(" "),
+            device.model.model_name
         ));
     }
     let profile = project
@@ -682,6 +716,9 @@ fn validate_components(project: &Project, sheet: &SchematicSheet) -> Vec<Netlist
             refs.insert(key, owner);
         }
         if let Some(model) = &component.model {
+            if component.kind == ComponentKind::Device {
+                continue;
+            }
             let definition = project
                 .spice_libraries
                 .iter()
@@ -874,33 +911,58 @@ mod tests {
             Point { x: 300.0, y: 300.0 },
         )
         .unwrap();
-        let min_y = component
-            .pins
+        let logical_id = component.device.as_ref().unwrap().logical_instance_id;
+        project.sheets[0].components.push(component);
+        let power = crate::device_instance::place_unit(
+            &mut project,
+            &embedded.sha256,
+            "sta100",
+            None,
+            Some("power"),
+            logical_id,
+            Point { x: 600.0, y: 300.0 },
+        )
+        .unwrap();
+        project.sheets[0].components.push(power);
+        let min_y = project.sheets[0]
+            .components
             .iter()
-            .map(|pin| component.position.y + pin.offset.y)
+            .flat_map(|component| {
+                component
+                    .pins
+                    .iter()
+                    .map(|pin| component.position.y + pin.offset.y)
+            })
             .fold(f64::INFINITY, f64::min);
-        let max_y = component
-            .pins
+        let max_y = project.sheets[0]
+            .components
             .iter()
-            .map(|pin| component.position.y + pin.offset.y)
+            .flat_map(|component| {
+                component
+                    .pins
+                    .iter()
+                    .map(|pin| component.position.y + pin.offset.y)
+            })
             .fold(f64::NEG_INFINITY, f64::max);
         let mut wires = vec![crate::domain::Wire {
             id: Uuid::new_v4(),
             points: vec![Point { x: 0.0, y: min_y }, Point { x: 0.0, y: max_y }],
         }];
-        for pin in &component.pins {
-            let point = Point {
-                x: component.position.x + pin.offset.x,
-                y: component.position.y + pin.offset.y,
-            };
-            wires.push(crate::domain::Wire {
-                id: Uuid::new_v4(),
-                points: vec![point, Point { x: 0.0, y: point.y }],
-            });
+        for component in &project.sheets[0].components {
+            for pin in &component.pins {
+                let point = Point {
+                    x: component.position.x + pin.offset.x,
+                    y: component.position.y + pin.offset.y,
+                };
+                wires.push(crate::domain::Wire {
+                    id: Uuid::new_v4(),
+                    points: vec![point, Point { x: 0.0, y: point.y }],
+                });
+            }
         }
         let mut ground = crate::domain::component(ComponentKind::Ground, 0.0, max_y + 20.0, "", "");
         ground.pins[0].offset = Point { x: 0.0, y: -20.0 };
-        project.sheets[0].components.extend([component, ground]);
+        project.sheets[0].components.push(ground);
         project.sheets[0].wires = wires;
         let deck = generate(&project).unwrap();
         assert!(deck.contains(".subckt STA100"));

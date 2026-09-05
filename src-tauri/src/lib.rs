@@ -9,6 +9,7 @@ mod netlist;
 mod project;
 mod reliability;
 mod simulation;
+mod simulation_binding;
 
 use application::{EditorCommand, Workspace, WorkspaceSnapshot};
 use domain::Project;
