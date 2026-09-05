@@ -713,6 +713,33 @@ mod tests {
     }
 
     #[test]
+    fn real_device_pack_spice_fixture_runs_when_ngspice_is_available() {
+        let Some(backend) = real_backend() else {
+            return;
+        };
+        let embedded = crate::device_pack::import_bytes(include_bytes!(
+            "../../examples/devicepacks/test-analog.devicepack.json"
+        ))
+        .unwrap();
+        let library = crate::device_pack::embedded_spice_libraries(&embedded)
+            .unwrap()
+            .remove(0);
+        let deck = format!(
+            "{}\nVCC vcc 0 5\nVIN inp 0 1m\nX1 inp 0 vcc 0 out STA100\nRLOAD out 0 1k\n.op\n.end",
+            library.content
+        );
+        let result = backend
+            .run(&deck, &Analysis::OperatingPoint, &["v(out)".into()], None)
+            .unwrap();
+        let output = result
+            .signals
+            .iter()
+            .find(|signal| signal.name.eq_ignore_ascii_case("v(out)"))
+            .expect("ngspice returned the requested output voltage");
+        assert!(output.samples[0] > 90.0);
+    }
+
+    #[test]
     fn rejects_invalid_numeric_samples_and_probe_injection() {
         assert!(parse_number("NaN").is_err());
         assert!(parse_number("1,2,3").is_err());

@@ -426,7 +426,15 @@ pub fn generate(project: &Project) -> Result<String, Vec<NetlistError>> {
         *pin_counts.entry(uf.find(*p)).or_default() += 1;
     }
     for (component_id, pin_id, p, ground) in &pins {
-        if !ground && pin_counts.get(&uf.find(*p)).copied().unwrap_or(0) < 2 {
+        let pin_metadata = sheet
+            .components
+            .iter()
+            .find(|component| component.id == *component_id)
+            .and_then(|component| component.pins.iter().find(|pin| pin.id == *pin_id));
+        if !ground
+            && pin_metadata.is_none_or(|pin| !pin.no_connect && !pin.allow_floating)
+            && pin_counts.get(&uf.find(*p)).copied().unwrap_or(0) < 2
+        {
             errors.push(NetlistError {
                 code: "floating_pin",
                 message: format!("Pin {pin_id} is not electrically connected"),
@@ -511,7 +519,10 @@ pub fn generate(project: &Project) -> Result<String, Vec<NetlistError>> {
     let mut devices: Vec<&Component> = sheet
         .components
         .iter()
-        .filter(|c| !matches!(c.kind, ComponentKind::Ground | ComponentKind::NetLabel))
+        .filter(|c| {
+            !matches!(c.kind, ComponentKind::Ground | ComponentKind::NetLabel)
+                && (c.kind != ComponentKind::Device || c.model.is_some())
+        })
         .collect();
     devices.sort_by(|a, b| a.spice_ref.cmp(&b.spice_ref));
     let mut lines = vec![format!(
@@ -522,15 +533,17 @@ pub fn generate(project: &Project) -> Result<String, Vec<NetlistError>> {
         .iter()
         .filter_map(|component| component.model.as_ref().map(|model| model.library_id))
         .collect();
-    for library in &project.spice_libraries {
-        if used_libraries.contains(&library.id) {
-            lines.push(format!(
-                "* Embedded model library: {} ({})",
-                library.name.replace(['\n', '\r'], " "),
-                library.sha256
-            ));
-            lines.extend(library.content.lines().map(str::to_owned));
-        }
+    for library in project
+        .spice_libraries
+        .iter()
+        .filter(|library| used_libraries.contains(&library.id))
+    {
+        lines.push(format!(
+            "* Embedded model library: {} ({})",
+            library.name.replace(['\n', '\r'], " "),
+            library.sha256
+        ));
+        lines.extend(library.content.lines().map(str::to_owned));
     }
     for component in devices {
         let mut nodes: Vec<String> = component
@@ -600,7 +613,16 @@ fn validate_components(project: &Project, sheet: &SchematicSheet) -> Vec<Netlist
     let mut errors = vec![];
     let mut refs = BTreeSet::new();
     let mut exported = BTreeSet::new();
-    for library in &project.spice_libraries {
+    let used_library_ids: BTreeSet<_> = sheet
+        .components
+        .iter()
+        .filter_map(|component| component.model.as_ref().map(|model| model.library_id))
+        .collect();
+    for library in project
+        .spice_libraries
+        .iter()
+        .filter(|library| used_library_ids.contains(&library.id))
+    {
         for model in &library.models {
             if !exported.insert(model.name.to_ascii_lowercase()) {
                 errors.push(NetlistError {
@@ -618,8 +640,22 @@ fn validate_components(project: &Project, sheet: &SchematicSheet) -> Vec<Netlist
         ) {
             continue;
         }
+        let expected_prefix = if component.kind == ComponentKind::Device {
+            component
+                .model
+                .as_ref()
+                .map(|model| match model.kind {
+                    crate::domain::SpiceModelKind::Diode => "D",
+                    crate::domain::SpiceModelKind::Bipolar => "Q",
+                    crate::domain::SpiceModelKind::Mosfet => "M",
+                    crate::domain::SpiceModelKind::Subcircuit => "X",
+                })
+                .unwrap_or("U")
+        } else {
+            component.kind.prefix()
+        };
         if component.spice_ref.is_empty()
-            || !component.spice_ref.starts_with(component.kind.prefix())
+            || !component.spice_ref.starts_with(expected_prefix)
             || !component
                 .spice_ref
                 .chars()
@@ -656,7 +692,7 @@ fn validate_components(project: &Project, sheet: &SchematicSheet) -> Vec<Netlist
             };
             if definition.is_none_or(|definition| {
                 definition.kind != model.kind
-                    || component.kind != expected_kind
+                    || (component.kind != expected_kind && component.kind != ComponentKind::Device)
                     || definition.pins.len() != component.pins.len()
                     || definition
                         .pins
@@ -673,7 +709,7 @@ fn validate_components(project: &Project, sheet: &SchematicSheet) -> Vec<Netlist
                     component_id: Some(component.id),
                 });
             }
-        } else {
+        } else if component.kind != ComponentKind::Device {
             if matches!(
                 component.kind,
                 ComponentKind::Diode
@@ -770,6 +806,59 @@ mod tests {
             segment_intersection(((0, 40), (100, 40)), ((60, 0), (60, 80))),
             Some((60, 40))
         );
+    }
+
+    #[test]
+    fn device_pack_spice_subcircuit_is_emitted_with_embedded_model() {
+        let embedded = crate::device_pack::import_bytes(include_bytes!(
+            "../../examples/devicepacks/test-analog.devicepack.json"
+        ))
+        .unwrap();
+        let libraries = crate::device_pack::embedded_spice_libraries(&embedded).unwrap();
+        let mut project = Project::blank("pack spice");
+        project.simulation_profiles[0].signals.clear();
+        project.device_packs.push(embedded.clone());
+        project.spice_libraries = libraries;
+        let component = crate::device_pack::instantiate(
+            &project,
+            &embedded.sha256,
+            "sta100",
+            None,
+            Some("a"),
+            Point { x: 300.0, y: 300.0 },
+        )
+        .unwrap();
+        let min_y = component
+            .pins
+            .iter()
+            .map(|pin| component.position.y + pin.offset.y)
+            .fold(f64::INFINITY, f64::min);
+        let max_y = component
+            .pins
+            .iter()
+            .map(|pin| component.position.y + pin.offset.y)
+            .fold(f64::NEG_INFINITY, f64::max);
+        let mut wires = vec![crate::domain::Wire {
+            id: Uuid::new_v4(),
+            points: vec![Point { x: 0.0, y: min_y }, Point { x: 0.0, y: max_y }],
+        }];
+        for pin in &component.pins {
+            let point = Point {
+                x: component.position.x + pin.offset.x,
+                y: component.position.y + pin.offset.y,
+            };
+            wires.push(crate::domain::Wire {
+                id: Uuid::new_v4(),
+                points: vec![point, Point { x: 0.0, y: point.y }],
+            });
+        }
+        let mut ground = crate::domain::component(ComponentKind::Ground, 0.0, max_y + 20.0, "", "");
+        ground.pins[0].offset = Point { x: 0.0, y: -20.0 };
+        project.sheets[0].components.extend([component, ground]);
+        project.sheets[0].wires = wires;
+        let deck = generate(&project).unwrap();
+        assert!(deck.contains(".subckt STA100"));
+        assert!(deck.contains("X1 0 0 0 0 0 STA100"));
     }
 
     #[test]

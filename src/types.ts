@@ -10,8 +10,36 @@ export type ComponentKind =
   | "mosfet"
   | "subcircuit"
   | "ground"
-  | "netLabel";
-export type Pin = { id: string; name: string; offset: Point };
+  | "netLabel"
+  | "device";
+export type PinElectricalType =
+  | "passive"
+  | "input"
+  | "output"
+  | "bidirectional"
+  | "openDrain"
+  | "openCollector"
+  | "powerInput"
+  | "powerOutput"
+  | "noConnect";
+export type Pin = {
+  id: string;
+  name: string;
+  offset: Point;
+  number?: string | null;
+  group?: string | null;
+  electricalType?: PinElectricalType | null;
+  direction?: string | null;
+  voltageDomainId?: string | null;
+  voltageMin?: number | null;
+  voltageMax?: number | null;
+  alternateFunctions?: string[];
+  differentialPairId?: string | null;
+  differentialPolarity?: "positive" | "negative" | null;
+  required?: boolean;
+  allowFloating?: boolean;
+  noConnect?: boolean;
+};
 export type Component = {
   id: string;
   kind: ComponentKind;
@@ -22,6 +50,9 @@ export type Component = {
   displayName: string;
   spiceRef: string;
   model?: ModelBinding | null;
+  device?: DeviceBinding | null;
+  symbolWidth?: number | null;
+  symbolHeight?: number | null;
 };
 export type SpiceModelKind = "diode" | "bipolar" | "mosfet" | "subcircuit";
 export type SpiceModelDefinition = {
@@ -45,6 +76,114 @@ export type ModelBinding = {
 export type ComponentPlacement = {
   kind: ComponentKind;
   model?: { libraryId: string; modelName: string };
+  device?: {
+    packSha256: string;
+    deviceId: string;
+    variantId?: string | null;
+    unitId?: string | null;
+  };
+};
+
+export type DevicePackCapability = {
+  level: number;
+  code: string;
+  available: boolean;
+};
+export type DeviceBinding = {
+  packSha256: string;
+  packId: string;
+  packVersion: string;
+  deviceId: string;
+  variantId?: string | null;
+  symbolUnitId?: string | null;
+  capabilities: DevicePackCapability[];
+};
+export type DevicePackPin = {
+  id: string;
+  number: string;
+  name: string;
+  group: string;
+  electricalType: PinElectricalType;
+  direction: string;
+  voltageDomainId?: string | null;
+};
+export type DevicePack = {
+  manifest: {
+    formatVersion: number;
+    id: string;
+    name: string;
+    vendor: string;
+    version: string;
+    source: string;
+    license: string;
+    description?: string;
+  };
+  devices: {
+    id: string;
+    name: string;
+    deviceType: string;
+    symbolId: string;
+    packageId: string;
+    variants: { id: string; name: string; packageId?: string | null }[];
+    pins: DevicePackPin[];
+    voltageDomains: {
+      id: string;
+      name: string;
+      minVoltage: number;
+      maxVoltage: number;
+    }[];
+    alternateFunctions: { pinId: string; functions: string[] }[];
+    differentialPairs: {
+      id: string;
+      positivePinId: string;
+      negativePinId: string;
+    }[];
+    rules: { id: string; kind: string; pinIds: string[]; message?: string }[];
+    modelIds: string[];
+    sdkAdapterIds: string[];
+  }[];
+  symbols: {
+    id: string;
+    name: string;
+    units: { id: string; name: string; groups: string[] }[];
+  }[];
+  packages: { id: string; name: string; kind: string; pads: string[] }[];
+  models: {
+    id: string;
+    kind: "spice" | "ibis" | "sParameter";
+    format: string;
+    modelName?: string | null;
+    metadata: Record<string, string>;
+  }[];
+  sdkAdapters: {
+    id: string;
+    sdkType: string;
+    versionRequirement: string;
+    localPathPatterns: string[];
+    metadata: Record<string, string>;
+  }[];
+  documents: {
+    kind: string;
+    title: string;
+    sourceUrl: string;
+    revision?: string;
+    license?: string;
+  }[];
+};
+export type EmbeddedDevicePack = { sha256: string; pack: DevicePack };
+export type ErcIssue = {
+  code: string;
+  severity: string;
+  deviceId: string;
+  pinId: string | null;
+  messageZh: string;
+  messageEn: string;
+};
+export type ErcReport = {
+  passed: boolean;
+  issues: ErcIssue[];
+  checkedDevices: number;
+  checkedPins: number;
 };
 export type Wire = { id: string; points: Point[] };
 export type NetLabel = { id: string; name: string; position: Point };
@@ -102,6 +241,7 @@ export type Project = {
   }[];
   simulationProfiles: SimulationProfile[];
   spiceLibraries: SpiceLibrary[];
+  devicePacks: EmbeddedDevicePack[];
   activeSimulationProfile: string | null;
   uiViewState: {
     activeSheetId: string;
@@ -159,6 +299,14 @@ export type EditorCommand =
       modelName: string;
       position: Point;
     }
+  | {
+      action: "addDeviceComponent";
+      packSha256: string;
+      deviceId: string;
+      variantId: string | null;
+      unitId: string | null;
+      position: Point;
+    }
   | { action: "moveComponent"; id: string; position: Point }
   | {
       action: "moveSelection";
@@ -174,6 +322,12 @@ export type EditorCommand =
       value: string;
     }
   | { action: "rotateComponent"; id: string }
+  | {
+      action: "setPinNoConnect";
+      componentId: string;
+      pinId: string;
+      noConnect: boolean;
+    }
   | { action: "deleteSelection"; componentIds: string[]; wireIds: string[] }
   | { action: "insertSelection"; components: Component[]; wires: Wire[] }
   | { action: "addWire"; points: Point[] }

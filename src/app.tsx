@@ -9,6 +9,8 @@ import { Waveform } from "./waveform";
 import { SimulationConfig } from "./simulation-config";
 import { SimulationCheckPanel } from "./simulation-check-panel";
 import { RecoveryDialog, UnsavedChangesDialog } from "./reliability-dialogs";
+import { DevicePackManager } from "./device-pack-manager";
+import { ErcPanel } from "./erc-panel";
 import {
   availableProbeOptions,
   localSimulationCheck,
@@ -63,6 +65,7 @@ import type {
   SimulationResult,
   Snapshot,
   Wire,
+  ErcReport,
 } from "./types";
 
 type ClipboardPayload = { components: Component[]; wires: Wire[] };
@@ -179,6 +182,7 @@ const library: {
     shortcut: string;
     glyph: string;
     model?: { libraryId: string; modelName: string };
+    device?: ComponentPlacement["device"];
   }[];
 }[] = [
   {
@@ -319,6 +323,9 @@ function App() {
     null,
   );
   const [checking, setChecking] = useState(false);
+  const [ercReport, setErcReport] = useState<ErcReport | null>(null);
+  const [ercChecking, setErcChecking] = useState(false);
+  const [packManagerOpen, setPackManagerOpen] = useState(false);
   const [focusRequest, setFocusRequest] = useState<{
     componentId: string;
     nonce: number;
@@ -592,6 +599,128 @@ function App() {
             kind: definition.kind,
           },
         });
+      } else if (command.action === "addDeviceComponent") {
+        const embedded = next.project.devicePacks.find(
+          (pack) => pack.sha256 === command.packSha256,
+        );
+        const device = embedded?.pack.devices.find(
+          (item) => item.id === command.deviceId,
+        );
+        const symbol = embedded?.pack.symbols.find(
+          (item) => item.id === device?.symbolId,
+        );
+        const unit =
+          symbol?.units.find((item) => item.id === command.unitId) ??
+          symbol?.units[0];
+        if (!embedded || !device) return current;
+        const sources = device.pins.filter(
+          (pin) =>
+            !unit || !unit.groups.length || unit.groups.includes(pin.group),
+        );
+        const left = sources.filter(
+          (pin, index) =>
+            ["input", "power"].includes(pin.direction) ||
+            (index % 2 === 0 &&
+              ["passive", "bidirectional"].includes(pin.direction)),
+        );
+        const leftIds = new Set(left.map((pin) => pin.id));
+        const right = sources.filter((pin) => !leftIds.has(pin.id));
+        const domainById = new Map(
+          device.voltageDomains.map((domain) => [domain.id, domain]),
+        );
+        const offset = (pin: (typeof sources)[number]) => {
+          const side = leftIds.has(pin.id) ? left : right;
+          const index = side.findIndex((item) => item.id === pin.id);
+          return {
+            x: leftIds.has(pin.id) ? -110 : 110,
+            y: (index - (side.length - 1) / 2) * 20,
+          };
+        };
+        const model = embedded.pack.models.find(
+          (item) => item.kind === "spice" && device.modelIds.includes(item.id),
+        );
+        const library = model
+          ? next.project.spiceLibraries.find(
+              (item) =>
+                item.sourceName === `devicepack:${embedded.sha256}:${model.id}`,
+            )
+          : undefined;
+        const definition = library?.models.find(
+          (item) => item.name === model?.modelName,
+        );
+        const prefix = definition ? "X" : "U";
+        const sequence =
+          next.project.sheets[0].components.filter((item) =>
+            item.spiceRef.startsWith(prefix),
+          ).length + 1;
+        next.project.sheets[0].components.push({
+          id: crypto.randomUUID(),
+          kind: "device",
+          position: command.position,
+          rotation: 0,
+          parameters: {},
+          pins: sources.map((pin) => {
+            const domain = pin.voltageDomainId
+              ? domainById.get(pin.voltageDomainId)
+              : undefined;
+            const pair = device.differentialPairs.find(
+              (item) =>
+                item.positivePinId === pin.id || item.negativePinId === pin.id,
+            );
+            const rules = device.rules.filter((item) =>
+              item.pinIds.includes(pin.id),
+            );
+            return {
+              ...pin,
+              offset: offset(pin),
+              voltageMin: domain?.minVoltage,
+              voltageMax: domain?.maxVoltage,
+              alternateFunctions:
+                device.alternateFunctions.find((item) => item.pinId === pin.id)
+                  ?.functions ?? [],
+              differentialPairId: pair?.id,
+              differentialPolarity: pair
+                ? pair.positivePinId === pin.id
+                  ? "positive"
+                  : "negative"
+                : null,
+              required: rules.some(
+                (item) =>
+                  item.kind === "required" || item.kind === "powerInput",
+              ),
+              allowFloating:
+                rules.some((item) => item.kind === "allowFloating") ||
+                pin.direction === "notConnected",
+              noConnect: false,
+            };
+          }),
+          displayName: device.name,
+          spiceRef: `${prefix}${sequence}`,
+          model: definition
+            ? {
+                libraryId: library!.id,
+                modelName: definition.name,
+                kind: definition.kind,
+              }
+            : null,
+          device: {
+            packSha256: embedded.sha256,
+            packId: embedded.pack.manifest.id,
+            packVersion: embedded.pack.manifest.version,
+            deviceId: device.id,
+            variantId: command.variantId,
+            symbolUnitId: unit?.id ?? null,
+            capabilities: [],
+          },
+          symbolWidth: 220,
+          symbolHeight: Math.max(left.length, right.length, 2) * 20 + 36,
+        });
+      } else if (command.action === "setPinNoConnect") {
+        const component = next.project.sheets[0].components.find(
+          (item) => item.id === command.componentId,
+        );
+        const pin = component?.pins.find((item) => item.id === command.pinId);
+        if (pin) pin.noConnect = command.noConnect;
       } else if (command.action === "addComponent") {
         const defaults: Partial<Record<ComponentKind, [string, string]>> = {
           resistor: ["R", "1k"],
@@ -648,7 +777,10 @@ function App() {
   }, []);
   const command = useCallback(
     async (c: EditorCommand) => {
-      if (c.action !== "updateView") setCheckReport(null);
+      if (c.action !== "updateView") {
+        setCheckReport(null);
+        setErcReport(null);
+      }
       const task = pendingEdits.current.then(async () => {
         try {
           if (isDesktop()) acceptSnapshot(await api.apply(c));
@@ -967,6 +1099,62 @@ function App() {
       setBottomTab("Console");
     }
   };
+  const importDevicePack = async () => {
+    if (!isDesktop()) {
+      setLogs((lines) => [
+        ...lines,
+        "DEVICE PACK IMPORT requires the Tauri desktop app",
+      ]);
+      return;
+    }
+    const path = await open({
+      multiple: false,
+      filters: [{ name: "SugarEDA DevicePack", extensions: ["json"] }],
+    });
+    if (typeof path !== "string") return;
+    try {
+      const next = await api.importDevicePack(path);
+      acceptSnapshot(next);
+      setLogs((lines) => [
+        ...lines,
+        `${t("Imported device pack")}: ${next.project.devicePacks[next.project.devicePacks.length - 1]?.pack.manifest.name ?? path}`,
+      ]);
+    } catch (error) {
+      setLogs((lines) => [
+        ...lines,
+        `DEVICE PACK ERROR ${errorText(error, language)}`,
+      ]);
+      setBottomOpen(true);
+      setBottomTab("Console");
+    }
+  };
+
+  const checkErc = async () => {
+    setBottomOpen(true);
+    setBottomTab("ERC");
+    setErcChecking(true);
+    try {
+      await pendingEdits.current;
+      setErcReport(
+        isDesktop()
+          ? await api.erc()
+          : {
+              passed: true,
+              issues: [],
+              checkedDevices: sheet.components.filter(
+                (item) => item.kind === "device",
+              ).length,
+              checkedPins: sheet.components
+                .filter((item) => item.kind === "device")
+                .reduce((sum, item) => sum + item.pins.length, 0),
+            },
+      );
+    } catch (error) {
+      setLogs((lines) => [...lines, `ERC ERROR ${errorText(error, language)}`]);
+    } finally {
+      setErcChecking(false);
+    }
+  };
   const inspectNetlist = async () => {
     setBottomOpen(true);
     setBottomTab("Netlist");
@@ -1167,9 +1355,38 @@ function App() {
         model: { libraryId: source.id, modelName: model.name },
       })),
     );
+    const packed = snapshot.project.devicePacks.flatMap((embedded) =>
+      embedded.pack.devices.flatMap((device) => {
+        const symbol = embedded.pack.symbols.find(
+          (item) => item.id === device.symbolId,
+        );
+        const units = symbol?.units.length
+          ? symbol.units
+          : [{ id: "", name: device.name, groups: [] }];
+        return units.map((unit) => ({
+          kind: "device" as ComponentKind,
+          name:
+            units.length > 1 ? `${device.name} · ${unit.name}` : device.name,
+          shortcut: "U",
+          glyph:
+            device.deviceType === "soc"
+              ? "SOC"
+              : device.deviceType === "microcontroller"
+                ? "MCU"
+                : "IC",
+          device: {
+            packSha256: embedded.sha256,
+            deviceId: device.id,
+            variantId: device.variants[0]?.id ?? null,
+            unitId: unit.id || null,
+          },
+        }));
+      }),
+    );
     const groups = imported.length
       ? [...library, { group: "IMPORTED MODELS", items: imported }]
       : library;
+    if (packed.length) groups.push({ group: "DEVICE PACKS", items: packed });
     return groups
       .map((g) => ({
         ...g,
@@ -1178,7 +1395,7 @@ function App() {
         ),
       }))
       .filter((g) => g.items.length);
-  }, [query, snapshot.project.spiceLibraries]);
+  }, [query, snapshot.project.spiceLibraries, snapshot.project.devicePacks]);
   const probeOptions = useMemo(
     () => availableProbeOptions(snapshot.project),
     [snapshot.project],
@@ -1296,6 +1513,14 @@ function App() {
             ]}
           />
           <Menu
+            label={t("Tools")}
+            items={[
+              [t("Device pack manager"), "", () => setPackManagerOpen(true)],
+              [t("Import SPICE model library"), "", importSpiceLibrary],
+              [t("Electrical rules check"), "", checkErc],
+            ]}
+          />
+          <Menu
             label={t("Help")}
             items={[
               [
@@ -1376,8 +1601,8 @@ function App() {
           <div className="panel-heading">
             <span>{t("COMPONENTS")}</span>
             <button
-              title={t("Import SPICE model library")}
-              onClick={() => void importSpiceLibrary()}
+              title={t("Device pack manager")}
+              onClick={() => setPackManagerOpen(true)}
             >
               <PackagePlus />
             </button>
@@ -1399,7 +1624,22 @@ function App() {
                 </h3>
                 {group.items.map((item) => (
                   <div
-                    className={`library-item ${placement?.kind === item.kind && placement?.model?.modelName === item.model?.modelName ? "placing" : ""}`}
+                    className={`library-item ${
+                      placement?.kind === item.kind &&
+                      placement?.model?.modelName === item.model?.modelName &&
+                      placement?.device?.packSha256 ===
+                        ("device" in item
+                          ? item.device?.packSha256
+                          : undefined) &&
+                      placement?.device?.deviceId ===
+                        ("device" in item
+                          ? item.device?.deviceId
+                          : undefined) &&
+                      placement?.device?.unitId ===
+                        ("device" in item ? item.device?.unitId : undefined)
+                        ? "placing"
+                        : ""
+                    }`}
                     data-testid={`library-${item.kind}`}
                     role="button"
                     tabIndex={0}
@@ -1415,7 +1655,11 @@ function App() {
                       window.getSelection()?.removeAllRanges();
                       document.body.classList.add("component-dragging");
                       event.currentTarget.setPointerCapture(event.pointerId);
-                      const next = { kind: item.kind, model: item.model };
+                      const next = {
+                        kind: item.kind,
+                        model: item.model,
+                        device: "device" in item ? item.device : undefined,
+                      };
                       libraryPointer.current = {
                         placement: next,
                         start: { x: event.clientX, y: event.clientY },
@@ -1487,10 +1731,14 @@ function App() {
                       if (event.key === "Enter" || event.key === " ") {
                         event.preventDefault();
                         setTool("select");
-                        setPlacement({ kind: item.kind, model: item.model });
+                        setPlacement({
+                          kind: item.kind,
+                          model: item.model,
+                          device: "device" in item ? item.device : undefined,
+                        });
                       }
                     }}
-                    key={`${item.kind}-${item.model?.libraryId || "builtin"}-${item.name}`}
+                    key={`${item.kind}-${item.model?.libraryId || ("device" in item ? item.device?.packSha256 : "") || "builtin"}-${item.name}`}
                   >
                     <div className="symbol-mini">{item.glyph}</div>
                     <span>{t(item.name)}</span>
@@ -1501,9 +1749,11 @@ function App() {
             ))}
           </div>
           <div className="library-foot">
-            {snapshot.project.spiceLibraries.length
-              ? `${snapshot.project.spiceLibraries.length} ${t("model libraries embedded")}`
-              : t("Import a vendor model or drag a device")}
+            {snapshot.project.devicePacks.length
+              ? `${snapshot.project.devicePacks.length} ${t("packs embedded")}`
+              : snapshot.project.spiceLibraries.length
+                ? `${snapshot.project.spiceLibraries.length} ${t("model libraries embedded")}`
+                : t("Import a vendor model or drag a device")}
           </div>
         </aside>
         <section className="editor">
@@ -1576,7 +1826,22 @@ function App() {
                   ? t("WIRE · Click two endpoints")
                   : placement
                     ? language === "zh-CN"
-                      ? `放置 ${t(visibleLibrary.flatMap((group) => group.items).find((item) => item.kind === placement.kind && item.model?.modelName === placement.model?.modelName)?.name || placement.kind)} · 点击画布，Esc 取消`
+                      ? `放置 ${t(
+                          visibleLibrary
+                            .flatMap((group) => group.items)
+                            .find(
+                              (item) =>
+                                item.kind === placement.kind &&
+                                item.model?.modelName ===
+                                  placement.model?.modelName &&
+                                ("device" in item
+                                  ? item.device?.deviceId ===
+                                      placement.device?.deviceId &&
+                                    item.device?.unitId ===
+                                      placement.device?.unitId
+                                  : !placement.device),
+                            )?.name || placement.kind,
+                        )} · 点击画布，Esc 取消`
                       : "PLACE · Click canvas, Esc to cancel"
                     : sheet.wires.some((wire) => selected.includes(wire.id))
                       ? t("SELECT · Drag wire endpoints or handles to reshape")
@@ -1623,6 +1888,14 @@ function App() {
                   id: selectedComponent.id,
                 })
               }
+              onSetPinNoConnect={(pinId, noConnect) =>
+                void command({
+                  action: "setPinNoConnect",
+                  componentId: selectedComponent.id,
+                  pinId,
+                  noConnect,
+                })
+              }
             />
           ) : (
             <div className="inspector-empty">
@@ -1657,22 +1930,27 @@ function App() {
             className="bottom-tabs"
           >
             <TabsList className="tabs-list">
-              {["Check", "Configure", "Netlist", "Console", "Waveform"].map(
-                (tab) => (
-                  <TabsTrigger
-                    key={tab}
-                    className={bottomTab === tab ? "active" : ""}
-                    value={tab}
-                  >
-                    {t(tab)}
-                    {tab === "Console" &&
-                      logs.some((l) => l.includes("ERROR")) && <i />}
-                    {tab === "Check" && checkReport && !checkReport.ready && (
-                      <i />
-                    )}
-                  </TabsTrigger>
-                ),
-              )}
+              {[
+                "ERC",
+                "Check",
+                "Configure",
+                "Netlist",
+                "Console",
+                "Waveform",
+              ].map((tab) => (
+                <TabsTrigger
+                  key={tab}
+                  className={bottomTab === tab ? "active" : ""}
+                  value={tab}
+                >
+                  {t(tab)}
+                  {tab === "Console" &&
+                    logs.some((l) => l.includes("ERROR")) && <i />}
+                  {tab === "Check" && checkReport && !checkReport.ready && (
+                    <i />
+                  )}
+                </TabsTrigger>
+              ))}
             </TabsList>
             <div className="sim-health">
               <span className={status.available ? "led ok" : "led"} />
@@ -1698,6 +1976,14 @@ function App() {
                 onCheck={() => void checkSimulation()}
                 onLocate={locateCheckIssue}
                 formatIssue={(issue) => validationMessage(issue, language)}
+              />
+            )}{" "}
+            {bottomTab === "ERC" && (
+              <ErcPanel
+                report={ercReport}
+                checking={ercChecking}
+                onCheck={() => void checkErc()}
+                onLocate={locateCheckIssue}
               />
             )}{" "}
             {bottomTab === "Waveform" && (
@@ -1822,6 +2108,16 @@ function App() {
         onRestore={() => void restoreAutosave()}
         onDiscard={() => void discardAutosave()}
       />
+      <DevicePackManager
+        open={packManagerOpen}
+        packs={snapshot.project.devicePacks}
+        onClose={() => setPackManagerOpen(false)}
+        onImport={() => void importDevicePack()}
+        onPlace={(next) => {
+          setTool("select");
+          setPlacement(next);
+        }}
+      />
     </div>
   );
 }
@@ -1940,10 +2236,12 @@ function ComponentInspector({
   component,
   onUpdate,
   onRotate,
+  onSetPinNoConnect,
 }: {
   component: Component;
   onUpdate: (name: string, ref: string, value: string) => void;
   onRotate: () => void;
+  onSetPinNoConnect: (pinId: string, noConnect: boolean) => void;
 }) {
   const { language } = useI18n();
   const [name, setName] = useState(component.displayName),
@@ -2003,7 +2301,7 @@ function ComponentInspector({
                 {language === "zh-CN" ? "嵌入模型库" : "embedded library"}
               </small>
             </label>
-          ) : (
+          ) : component.kind !== "device" ? (
             <label>
               {component.kind === "netLabel"
                 ? language === "zh-CN"
@@ -2025,6 +2323,12 @@ function ComponentInspector({
                 </small>
               )}
             </label>
+          ) : (
+            <div className="device-inspector-note">
+              {language === "zh-CN"
+                ? "此器件仅在声明并绑定 SPICE 模型时参与仿真。"
+                : "This device participates in simulation only when an explicit SPICE model is bound."}
+            </div>
           )}
         </>
       )}
@@ -2059,8 +2363,30 @@ function ComponentInspector({
         {component.pins.map((pin) => (
           <div className="pin-row" key={pin.id}>
             <i />
-            {pin.id}
-            <span>{pin.name}</span>
+            {pin.number || pin.id}
+            <span>
+              <b>{pin.name}</b>
+              {pin.group && (
+                <small>
+                  {pin.group}
+                  {pin.voltageDomainId ? ` · ${pin.voltageDomainId}` : ""}
+                </small>
+              )}
+            </span>
+            {component.kind === "device" && (
+              <button
+                type="button"
+                className={pin.noConnect ? "nc active" : "nc"}
+                title={
+                  language === "zh-CN"
+                    ? "明确标记 No Connect"
+                    : "Explicit No Connect"
+                }
+                onClick={() => onSetPinNoConnect(pin.id, !pin.noConnect)}
+              >
+                NC
+              </button>
+            )}
           </div>
         ))}
       </section>

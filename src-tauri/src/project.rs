@@ -3,13 +3,13 @@ use crate::models::ModelImportError;
 use std::{fs, io::Write, path::Path};
 use thiserror::Error;
 
-const MAX_PROJECT_BYTES: u64 = 16 * 1024 * 1024;
+const MAX_PROJECT_BYTES: u64 = 64 * 1024 * 1024;
 
 #[derive(Debug, Error)]
 pub enum ProjectError {
     #[error("project path must use the .sugeda extension")]
     Extension,
-    #[error("project file is larger than 16 MiB")]
+    #[error("project file is larger than 64 MiB")]
     TooLarge,
     #[error("cannot read project: {0}")]
     Read(#[from] std::io::Error),
@@ -29,6 +29,10 @@ pub enum ProjectError {
     InvalidView,
     #[error("embedded SPICE model is invalid: {0}")]
     Model(#[from] ModelImportError),
+    #[error("embedded device pack is invalid: {0}")]
+    DevicePack(String),
+    #[error("device component binding is missing or inconsistent")]
+    DeviceBinding,
 }
 
 pub fn load(path: &Path) -> Result<Project, ProjectError> {
@@ -39,7 +43,7 @@ pub fn load(path: &Path) -> Result<Project, ProjectError> {
     }
     let bytes = fs::read(path)?;
     let mut project: Project = serde_json::from_slice(&bytes)?;
-    if project.schema_version == 1 {
+    if matches!(project.schema_version, 1 | 2) {
         project.schema_version = SCHEMA_VERSION;
     }
     validate(&project)?;
@@ -115,6 +119,45 @@ pub fn validate(project: &Project) -> Result<(), ProjectError> {
     for library in &project.spice_libraries {
         crate::models::validate_library(library)?;
     }
+    let mut hashes = std::collections::BTreeSet::new();
+    for embedded in &project.device_packs {
+        crate::device_pack::validate(&embedded.pack)
+            .map_err(|error| ProjectError::DevicePack(error.to_string()))?;
+        if embedded.sha256 != crate::device_pack::content_hash(&embedded.pack) {
+            return Err(ProjectError::DevicePack(
+                "device-pack content hash mismatch".into(),
+            ));
+        }
+        if !hashes.insert(&embedded.sha256) {
+            return Err(ProjectError::DevicePack(
+                "duplicate device-pack content hash".into(),
+            ));
+        }
+    }
+    for component in project.sheets.iter().flat_map(|sheet| &sheet.components) {
+        if component.kind == crate::domain::ComponentKind::Device {
+            let Some(binding) = &component.device else {
+                return Err(ProjectError::DeviceBinding);
+            };
+            let Some(pack) = project
+                .device_packs
+                .iter()
+                .find(|pack| pack.sha256 == binding.pack_sha256)
+            else {
+                return Err(ProjectError::DeviceBinding);
+            };
+            if pack.pack.manifest.id != binding.pack_id
+                || pack.pack.manifest.version != binding.pack_version
+                || !pack
+                    .pack
+                    .devices
+                    .iter()
+                    .any(|device| device.id == binding.device_id)
+            {
+                return Err(ProjectError::DeviceBinding);
+            }
+        }
+    }
     Ok(())
 }
 
@@ -144,5 +187,40 @@ mod tests {
             validate(&project),
             Err(ProjectError::InvalidWireGeometry)
         ));
+    }
+
+    #[test]
+    fn version_two_projects_migrate_and_embedded_device_instances_round_trip() {
+        let embedded = crate::device_pack::import_bytes(include_bytes!(
+            "../../examples/devicepacks/test-mcu.devicepack.json"
+        ))
+        .unwrap();
+        let mut project = Project::blank("device round trip");
+        project.device_packs.push(embedded.clone());
+        let component = crate::device_pack::instantiate(
+            &project,
+            &embedded.sha256,
+            "stmcu24",
+            Some("industrial"),
+            Some("core"),
+            crate::domain::Point { x: 300.0, y: 300.0 },
+        )
+        .unwrap();
+        project.sheets[0].components.push(component.clone());
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("device.sugeda");
+        save(&path, &project).unwrap();
+        let reopened = load(&path).unwrap();
+        assert_eq!(reopened.device_packs, project.device_packs);
+        assert_eq!(reopened.sheets[0].components[0].device, component.device);
+        assert_eq!(reopened.sheets[0].components[0].pins, component.pins);
+
+        let mut value = serde_json::to_value(Project::blank("legacy")).unwrap();
+        value["schemaVersion"] = 2.into();
+        value.as_object_mut().unwrap().remove("devicePacks");
+        std::fs::write(&path, serde_json::to_vec(&value).unwrap()).unwrap();
+        let migrated = load(&path).unwrap();
+        assert_eq!(migrated.schema_version, SCHEMA_VERSION);
+        assert!(migrated.device_packs.is_empty());
     }
 }

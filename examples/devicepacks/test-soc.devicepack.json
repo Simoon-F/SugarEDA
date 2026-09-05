@@ -1,0 +1,1880 @@
+{
+  "manifest": {
+    "formatVersion": 1,
+    "id": "org.sugareda.test.soc",
+    "name": "SugarEDA Test Large SoC",
+    "vendor": "SugarEDA Project",
+    "version": "1.0.0",
+    "source": "SugarEDA self-contained test fixture",
+    "license": "CC0-1.0",
+    "description": "Fictional test data; not derived from any real vendor device."
+  },
+  "devices": [
+    {
+      "id": "stsoc144",
+      "name": "STSOC144 Fictional SoC",
+      "deviceType": "soc",
+      "symbolId": "soc-symbol",
+      "packageId": "bga144",
+      "variants": [
+        {
+          "id": "base",
+          "name": "Base test variant"
+        }
+      ],
+      "pins": [
+        {
+          "id": "p1",
+          "number": "A1",
+          "name": "REG_OUT_0",
+          "group": "POWER",
+          "electricalType": "powerOutput",
+          "direction": "power",
+          "voltageDomainId": "vio"
+        },
+        {
+          "id": "p2",
+          "number": "A2",
+          "name": "VDD_1",
+          "group": "POWER",
+          "electricalType": "powerInput",
+          "direction": "power",
+          "voltageDomainId": "vio"
+        },
+        {
+          "id": "p3",
+          "number": "A3",
+          "name": "REG_OUT_2",
+          "group": "POWER",
+          "electricalType": "powerOutput",
+          "direction": "power",
+          "voltageDomainId": "vio"
+        },
+        {
+          "id": "p4",
+          "number": "A4",
+          "name": "VDD_3",
+          "group": "POWER",
+          "electricalType": "powerInput",
+          "direction": "power",
+          "voltageDomainId": "vio"
+        },
+        {
+          "id": "p5",
+          "number": "A5",
+          "name": "REG_OUT_4",
+          "group": "POWER",
+          "electricalType": "powerOutput",
+          "direction": "power",
+          "voltageDomainId": "vio"
+        },
+        {
+          "id": "p6",
+          "number": "A6",
+          "name": "VDD_5",
+          "group": "POWER",
+          "electricalType": "powerInput",
+          "direction": "power",
+          "voltageDomainId": "vio"
+        },
+        {
+          "id": "p7",
+          "number": "A7",
+          "name": "REG_OUT_6",
+          "group": "POWER",
+          "electricalType": "powerOutput",
+          "direction": "power",
+          "voltageDomainId": "vio"
+        },
+        {
+          "id": "p8",
+          "number": "A8",
+          "name": "VDD_7",
+          "group": "POWER",
+          "electricalType": "powerInput",
+          "direction": "power",
+          "voltageDomainId": "vio"
+        },
+        {
+          "id": "p9",
+          "number": "A9",
+          "name": "REG_OUT_8",
+          "group": "POWER",
+          "electricalType": "powerOutput",
+          "direction": "power",
+          "voltageDomainId": "vio"
+        },
+        {
+          "id": "p10",
+          "number": "A10",
+          "name": "VDD_9",
+          "group": "POWER",
+          "electricalType": "powerInput",
+          "direction": "power",
+          "voltageDomainId": "vio"
+        },
+        {
+          "id": "p11",
+          "number": "A11",
+          "name": "REG_OUT_10",
+          "group": "POWER",
+          "electricalType": "powerOutput",
+          "direction": "power",
+          "voltageDomainId": "vio"
+        },
+        {
+          "id": "p12",
+          "number": "A12",
+          "name": "VDD_11",
+          "group": "POWER",
+          "electricalType": "powerInput",
+          "direction": "power",
+          "voltageDomainId": "vio"
+        },
+        {
+          "id": "p13",
+          "number": "B1",
+          "name": "REG_OUT_12",
+          "group": "POWER",
+          "electricalType": "powerOutput",
+          "direction": "power",
+          "voltageDomainId": "vio"
+        },
+        {
+          "id": "p14",
+          "number": "B2",
+          "name": "VDD_13",
+          "group": "POWER",
+          "electricalType": "powerInput",
+          "direction": "power",
+          "voltageDomainId": "vio"
+        },
+        {
+          "id": "p15",
+          "number": "B3",
+          "name": "REG_OUT_14",
+          "group": "POWER",
+          "electricalType": "powerOutput",
+          "direction": "power",
+          "voltageDomainId": "vio"
+        },
+        {
+          "id": "p16",
+          "number": "B4",
+          "name": "VDD_15",
+          "group": "POWER",
+          "electricalType": "powerInput",
+          "direction": "power",
+          "voltageDomainId": "vio"
+        },
+        {
+          "id": "p17",
+          "number": "B5",
+          "name": "REG_OUT_16",
+          "group": "POWER",
+          "electricalType": "powerOutput",
+          "direction": "power",
+          "voltageDomainId": "vio"
+        },
+        {
+          "id": "p18",
+          "number": "B6",
+          "name": "VDD_17",
+          "group": "POWER",
+          "electricalType": "powerInput",
+          "direction": "power",
+          "voltageDomainId": "vio"
+        },
+        {
+          "id": "p19",
+          "number": "B7",
+          "name": "REG_OUT_18",
+          "group": "POWER",
+          "electricalType": "powerOutput",
+          "direction": "power",
+          "voltageDomainId": "vio"
+        },
+        {
+          "id": "p20",
+          "number": "B8",
+          "name": "VDD_19",
+          "group": "POWER",
+          "electricalType": "powerInput",
+          "direction": "power",
+          "voltageDomainId": "vio"
+        },
+        {
+          "id": "p21",
+          "number": "B9",
+          "name": "REG_OUT_20",
+          "group": "POWER",
+          "electricalType": "powerOutput",
+          "direction": "power",
+          "voltageDomainId": "vio"
+        },
+        {
+          "id": "p22",
+          "number": "B10",
+          "name": "VDD_21",
+          "group": "POWER",
+          "electricalType": "powerInput",
+          "direction": "power",
+          "voltageDomainId": "vio"
+        },
+        {
+          "id": "p23",
+          "number": "B11",
+          "name": "REG_OUT_22",
+          "group": "POWER",
+          "electricalType": "powerOutput",
+          "direction": "power",
+          "voltageDomainId": "vio"
+        },
+        {
+          "id": "p24",
+          "number": "B12",
+          "name": "VDD_23",
+          "group": "POWER",
+          "electricalType": "powerInput",
+          "direction": "power",
+          "voltageDomainId": "vio"
+        },
+        {
+          "id": "p25",
+          "number": "C1",
+          "name": "CORE_00",
+          "group": "CORE",
+          "electricalType": "input",
+          "direction": "input",
+          "voltageDomainId": "vcore"
+        },
+        {
+          "id": "p26",
+          "number": "C2",
+          "name": "CORE_01",
+          "group": "CORE",
+          "electricalType": "input",
+          "direction": "input",
+          "voltageDomainId": "vcore"
+        },
+        {
+          "id": "p27",
+          "number": "C3",
+          "name": "CORE_02",
+          "group": "CORE",
+          "electricalType": "input",
+          "direction": "input",
+          "voltageDomainId": "vcore"
+        },
+        {
+          "id": "p28",
+          "number": "C4",
+          "name": "CORE_03",
+          "group": "CORE",
+          "electricalType": "input",
+          "direction": "input",
+          "voltageDomainId": "vcore"
+        },
+        {
+          "id": "p29",
+          "number": "C5",
+          "name": "CORE_04",
+          "group": "CORE",
+          "electricalType": "input",
+          "direction": "input",
+          "voltageDomainId": "vcore"
+        },
+        {
+          "id": "p30",
+          "number": "C6",
+          "name": "CORE_05",
+          "group": "CORE",
+          "electricalType": "input",
+          "direction": "input",
+          "voltageDomainId": "vcore"
+        },
+        {
+          "id": "p31",
+          "number": "C7",
+          "name": "CORE_06",
+          "group": "CORE",
+          "electricalType": "input",
+          "direction": "input",
+          "voltageDomainId": "vcore"
+        },
+        {
+          "id": "p32",
+          "number": "C8",
+          "name": "CORE_07",
+          "group": "CORE",
+          "electricalType": "input",
+          "direction": "input",
+          "voltageDomainId": "vcore"
+        },
+        {
+          "id": "p33",
+          "number": "C9",
+          "name": "CORE_08",
+          "group": "CORE",
+          "electricalType": "input",
+          "direction": "input",
+          "voltageDomainId": "vcore"
+        },
+        {
+          "id": "p34",
+          "number": "C10",
+          "name": "CORE_09",
+          "group": "CORE",
+          "electricalType": "input",
+          "direction": "input",
+          "voltageDomainId": "vcore"
+        },
+        {
+          "id": "p35",
+          "number": "C11",
+          "name": "CORE_10",
+          "group": "CORE",
+          "electricalType": "input",
+          "direction": "input",
+          "voltageDomainId": "vcore"
+        },
+        {
+          "id": "p36",
+          "number": "C12",
+          "name": "CORE_11",
+          "group": "CORE",
+          "electricalType": "input",
+          "direction": "input",
+          "voltageDomainId": "vcore"
+        },
+        {
+          "id": "p37",
+          "number": "D1",
+          "name": "CORE_12",
+          "group": "CORE",
+          "electricalType": "input",
+          "direction": "input",
+          "voltageDomainId": "vcore"
+        },
+        {
+          "id": "p38",
+          "number": "D2",
+          "name": "CORE_13",
+          "group": "CORE",
+          "electricalType": "input",
+          "direction": "input",
+          "voltageDomainId": "vcore"
+        },
+        {
+          "id": "p39",
+          "number": "D3",
+          "name": "CORE_14",
+          "group": "CORE",
+          "electricalType": "input",
+          "direction": "input",
+          "voltageDomainId": "vcore"
+        },
+        {
+          "id": "p40",
+          "number": "D4",
+          "name": "CORE_15",
+          "group": "CORE",
+          "electricalType": "input",
+          "direction": "input",
+          "voltageDomainId": "vcore"
+        },
+        {
+          "id": "p41",
+          "number": "D5",
+          "name": "CORE_16",
+          "group": "CORE",
+          "electricalType": "input",
+          "direction": "input",
+          "voltageDomainId": "vcore"
+        },
+        {
+          "id": "p42",
+          "number": "D6",
+          "name": "CORE_17",
+          "group": "CORE",
+          "electricalType": "input",
+          "direction": "input",
+          "voltageDomainId": "vcore"
+        },
+        {
+          "id": "p43",
+          "number": "D7",
+          "name": "CORE_18",
+          "group": "CORE",
+          "electricalType": "input",
+          "direction": "input",
+          "voltageDomainId": "vcore"
+        },
+        {
+          "id": "p44",
+          "number": "D8",
+          "name": "CORE_19",
+          "group": "CORE",
+          "electricalType": "input",
+          "direction": "input",
+          "voltageDomainId": "vcore"
+        },
+        {
+          "id": "p45",
+          "number": "D9",
+          "name": "CORE_20",
+          "group": "CORE",
+          "electricalType": "input",
+          "direction": "input",
+          "voltageDomainId": "vcore"
+        },
+        {
+          "id": "p46",
+          "number": "D10",
+          "name": "CORE_21",
+          "group": "CORE",
+          "electricalType": "input",
+          "direction": "input",
+          "voltageDomainId": "vcore"
+        },
+        {
+          "id": "p47",
+          "number": "D11",
+          "name": "CORE_22",
+          "group": "CORE",
+          "electricalType": "input",
+          "direction": "input",
+          "voltageDomainId": "vcore"
+        },
+        {
+          "id": "p48",
+          "number": "D12",
+          "name": "CORE_23",
+          "group": "CORE",
+          "electricalType": "input",
+          "direction": "input",
+          "voltageDomainId": "vcore"
+        },
+        {
+          "id": "p49",
+          "number": "E1",
+          "name": "DDR_00",
+          "group": "DDR",
+          "electricalType": "bidirectional",
+          "direction": "bidirectional",
+          "voltageDomainId": "vddr"
+        },
+        {
+          "id": "p50",
+          "number": "E2",
+          "name": "DDR_01",
+          "group": "DDR",
+          "electricalType": "bidirectional",
+          "direction": "bidirectional",
+          "voltageDomainId": "vddr"
+        },
+        {
+          "id": "p51",
+          "number": "E3",
+          "name": "DDR_02",
+          "group": "DDR",
+          "electricalType": "bidirectional",
+          "direction": "bidirectional",
+          "voltageDomainId": "vddr"
+        },
+        {
+          "id": "p52",
+          "number": "E4",
+          "name": "DDR_03",
+          "group": "DDR",
+          "electricalType": "bidirectional",
+          "direction": "bidirectional",
+          "voltageDomainId": "vddr"
+        },
+        {
+          "id": "p53",
+          "number": "E5",
+          "name": "DDR_04",
+          "group": "DDR",
+          "electricalType": "bidirectional",
+          "direction": "bidirectional",
+          "voltageDomainId": "vddr"
+        },
+        {
+          "id": "p54",
+          "number": "E6",
+          "name": "DDR_05",
+          "group": "DDR",
+          "electricalType": "bidirectional",
+          "direction": "bidirectional",
+          "voltageDomainId": "vddr"
+        },
+        {
+          "id": "p55",
+          "number": "E7",
+          "name": "DDR_06",
+          "group": "DDR",
+          "electricalType": "bidirectional",
+          "direction": "bidirectional",
+          "voltageDomainId": "vddr"
+        },
+        {
+          "id": "p56",
+          "number": "E8",
+          "name": "DDR_07",
+          "group": "DDR",
+          "electricalType": "bidirectional",
+          "direction": "bidirectional",
+          "voltageDomainId": "vddr"
+        },
+        {
+          "id": "p57",
+          "number": "E9",
+          "name": "DDR_08",
+          "group": "DDR",
+          "electricalType": "bidirectional",
+          "direction": "bidirectional",
+          "voltageDomainId": "vddr"
+        },
+        {
+          "id": "p58",
+          "number": "E10",
+          "name": "DDR_09",
+          "group": "DDR",
+          "electricalType": "bidirectional",
+          "direction": "bidirectional",
+          "voltageDomainId": "vddr"
+        },
+        {
+          "id": "p59",
+          "number": "E11",
+          "name": "DDR_10",
+          "group": "DDR",
+          "electricalType": "bidirectional",
+          "direction": "bidirectional",
+          "voltageDomainId": "vddr"
+        },
+        {
+          "id": "p60",
+          "number": "E12",
+          "name": "DDR_11",
+          "group": "DDR",
+          "electricalType": "bidirectional",
+          "direction": "bidirectional",
+          "voltageDomainId": "vddr"
+        },
+        {
+          "id": "p61",
+          "number": "F1",
+          "name": "DDR_12",
+          "group": "DDR",
+          "electricalType": "bidirectional",
+          "direction": "bidirectional",
+          "voltageDomainId": "vddr"
+        },
+        {
+          "id": "p62",
+          "number": "F2",
+          "name": "DDR_13",
+          "group": "DDR",
+          "electricalType": "bidirectional",
+          "direction": "bidirectional",
+          "voltageDomainId": "vddr"
+        },
+        {
+          "id": "p63",
+          "number": "F3",
+          "name": "DDR_14",
+          "group": "DDR",
+          "electricalType": "bidirectional",
+          "direction": "bidirectional",
+          "voltageDomainId": "vddr"
+        },
+        {
+          "id": "p64",
+          "number": "F4",
+          "name": "DDR_15",
+          "group": "DDR",
+          "electricalType": "bidirectional",
+          "direction": "bidirectional",
+          "voltageDomainId": "vddr"
+        },
+        {
+          "id": "p65",
+          "number": "F5",
+          "name": "DDR_16",
+          "group": "DDR",
+          "electricalType": "bidirectional",
+          "direction": "bidirectional",
+          "voltageDomainId": "vddr"
+        },
+        {
+          "id": "p66",
+          "number": "F6",
+          "name": "DDR_17",
+          "group": "DDR",
+          "electricalType": "bidirectional",
+          "direction": "bidirectional",
+          "voltageDomainId": "vddr"
+        },
+        {
+          "id": "p67",
+          "number": "F7",
+          "name": "DDR_18",
+          "group": "DDR",
+          "electricalType": "bidirectional",
+          "direction": "bidirectional",
+          "voltageDomainId": "vddr"
+        },
+        {
+          "id": "p68",
+          "number": "F8",
+          "name": "DDR_19",
+          "group": "DDR",
+          "electricalType": "bidirectional",
+          "direction": "bidirectional",
+          "voltageDomainId": "vddr"
+        },
+        {
+          "id": "p69",
+          "number": "F9",
+          "name": "DDR_20",
+          "group": "DDR",
+          "electricalType": "bidirectional",
+          "direction": "bidirectional",
+          "voltageDomainId": "vddr"
+        },
+        {
+          "id": "p70",
+          "number": "F10",
+          "name": "DDR_21",
+          "group": "DDR",
+          "electricalType": "bidirectional",
+          "direction": "bidirectional",
+          "voltageDomainId": "vddr"
+        },
+        {
+          "id": "p71",
+          "number": "F11",
+          "name": "DDR_22",
+          "group": "DDR",
+          "electricalType": "bidirectional",
+          "direction": "bidirectional",
+          "voltageDomainId": "vddr"
+        },
+        {
+          "id": "p72",
+          "number": "F12",
+          "name": "DDR_23",
+          "group": "DDR",
+          "electricalType": "bidirectional",
+          "direction": "bidirectional",
+          "voltageDomainId": "vddr"
+        },
+        {
+          "id": "p73",
+          "number": "G1",
+          "name": "GPIO_00",
+          "group": "GPIO",
+          "electricalType": "bidirectional",
+          "direction": "bidirectional",
+          "voltageDomainId": "vio"
+        },
+        {
+          "id": "p74",
+          "number": "G2",
+          "name": "GPIO_01",
+          "group": "GPIO",
+          "electricalType": "bidirectional",
+          "direction": "bidirectional",
+          "voltageDomainId": "vio"
+        },
+        {
+          "id": "p75",
+          "number": "G3",
+          "name": "GPIO_02",
+          "group": "GPIO",
+          "electricalType": "bidirectional",
+          "direction": "bidirectional",
+          "voltageDomainId": "vio"
+        },
+        {
+          "id": "p76",
+          "number": "G4",
+          "name": "GPIO_03",
+          "group": "GPIO",
+          "electricalType": "bidirectional",
+          "direction": "bidirectional",
+          "voltageDomainId": "vio"
+        },
+        {
+          "id": "p77",
+          "number": "G5",
+          "name": "GPIO_04",
+          "group": "GPIO",
+          "electricalType": "bidirectional",
+          "direction": "bidirectional",
+          "voltageDomainId": "vio"
+        },
+        {
+          "id": "p78",
+          "number": "G6",
+          "name": "GPIO_05",
+          "group": "GPIO",
+          "electricalType": "bidirectional",
+          "direction": "bidirectional",
+          "voltageDomainId": "vio"
+        },
+        {
+          "id": "p79",
+          "number": "G7",
+          "name": "GPIO_06",
+          "group": "GPIO",
+          "electricalType": "bidirectional",
+          "direction": "bidirectional",
+          "voltageDomainId": "vio"
+        },
+        {
+          "id": "p80",
+          "number": "G8",
+          "name": "GPIO_07",
+          "group": "GPIO",
+          "electricalType": "bidirectional",
+          "direction": "bidirectional",
+          "voltageDomainId": "vio"
+        },
+        {
+          "id": "p81",
+          "number": "G9",
+          "name": "GPIO_08",
+          "group": "GPIO",
+          "electricalType": "bidirectional",
+          "direction": "bidirectional",
+          "voltageDomainId": "vio"
+        },
+        {
+          "id": "p82",
+          "number": "G10",
+          "name": "GPIO_09",
+          "group": "GPIO",
+          "electricalType": "bidirectional",
+          "direction": "bidirectional",
+          "voltageDomainId": "vio"
+        },
+        {
+          "id": "p83",
+          "number": "G11",
+          "name": "GPIO_10",
+          "group": "GPIO",
+          "electricalType": "bidirectional",
+          "direction": "bidirectional",
+          "voltageDomainId": "vio"
+        },
+        {
+          "id": "p84",
+          "number": "G12",
+          "name": "GPIO_11",
+          "group": "GPIO",
+          "electricalType": "bidirectional",
+          "direction": "bidirectional",
+          "voltageDomainId": "vio"
+        },
+        {
+          "id": "p85",
+          "number": "H1",
+          "name": "GPIO_12",
+          "group": "GPIO",
+          "electricalType": "bidirectional",
+          "direction": "bidirectional",
+          "voltageDomainId": "vio"
+        },
+        {
+          "id": "p86",
+          "number": "H2",
+          "name": "GPIO_13",
+          "group": "GPIO",
+          "electricalType": "bidirectional",
+          "direction": "bidirectional",
+          "voltageDomainId": "vio"
+        },
+        {
+          "id": "p87",
+          "number": "H3",
+          "name": "GPIO_14",
+          "group": "GPIO",
+          "electricalType": "bidirectional",
+          "direction": "bidirectional",
+          "voltageDomainId": "vio"
+        },
+        {
+          "id": "p88",
+          "number": "H4",
+          "name": "GPIO_15",
+          "group": "GPIO",
+          "electricalType": "bidirectional",
+          "direction": "bidirectional",
+          "voltageDomainId": "vio"
+        },
+        {
+          "id": "p89",
+          "number": "H5",
+          "name": "GPIO_16",
+          "group": "GPIO",
+          "electricalType": "bidirectional",
+          "direction": "bidirectional",
+          "voltageDomainId": "vio"
+        },
+        {
+          "id": "p90",
+          "number": "H6",
+          "name": "GPIO_17",
+          "group": "GPIO",
+          "electricalType": "bidirectional",
+          "direction": "bidirectional",
+          "voltageDomainId": "vio"
+        },
+        {
+          "id": "p91",
+          "number": "H7",
+          "name": "GPIO_18",
+          "group": "GPIO",
+          "electricalType": "bidirectional",
+          "direction": "bidirectional",
+          "voltageDomainId": "vio"
+        },
+        {
+          "id": "p92",
+          "number": "H8",
+          "name": "GPIO_19",
+          "group": "GPIO",
+          "electricalType": "bidirectional",
+          "direction": "bidirectional",
+          "voltageDomainId": "vio"
+        },
+        {
+          "id": "p93",
+          "number": "H9",
+          "name": "GPIO_20",
+          "group": "GPIO",
+          "electricalType": "bidirectional",
+          "direction": "bidirectional",
+          "voltageDomainId": "vio"
+        },
+        {
+          "id": "p94",
+          "number": "H10",
+          "name": "GPIO_21",
+          "group": "GPIO",
+          "electricalType": "bidirectional",
+          "direction": "bidirectional",
+          "voltageDomainId": "vio"
+        },
+        {
+          "id": "p95",
+          "number": "H11",
+          "name": "GPIO_22",
+          "group": "GPIO",
+          "electricalType": "bidirectional",
+          "direction": "bidirectional",
+          "voltageDomainId": "vio"
+        },
+        {
+          "id": "p96",
+          "number": "H12",
+          "name": "GPIO_23",
+          "group": "GPIO",
+          "electricalType": "bidirectional",
+          "direction": "bidirectional",
+          "voltageDomainId": "vio"
+        },
+        {
+          "id": "p97",
+          "number": "I1",
+          "name": "USB0_P",
+          "group": "USB",
+          "electricalType": "bidirectional",
+          "direction": "bidirectional",
+          "voltageDomainId": "vio"
+        },
+        {
+          "id": "p98",
+          "number": "I2",
+          "name": "USB0_N",
+          "group": "USB",
+          "electricalType": "bidirectional",
+          "direction": "bidirectional",
+          "voltageDomainId": "vio"
+        },
+        {
+          "id": "p99",
+          "number": "I3",
+          "name": "USB1_P",
+          "group": "USB",
+          "electricalType": "bidirectional",
+          "direction": "bidirectional",
+          "voltageDomainId": "vio"
+        },
+        {
+          "id": "p100",
+          "number": "I4",
+          "name": "USB1_N",
+          "group": "USB",
+          "electricalType": "bidirectional",
+          "direction": "bidirectional",
+          "voltageDomainId": "vio"
+        },
+        {
+          "id": "p101",
+          "number": "I5",
+          "name": "USB2_P",
+          "group": "USB",
+          "electricalType": "bidirectional",
+          "direction": "bidirectional",
+          "voltageDomainId": "vio"
+        },
+        {
+          "id": "p102",
+          "number": "I6",
+          "name": "USB2_N",
+          "group": "USB",
+          "electricalType": "bidirectional",
+          "direction": "bidirectional",
+          "voltageDomainId": "vio"
+        },
+        {
+          "id": "p103",
+          "number": "I7",
+          "name": "USB3_P",
+          "group": "USB",
+          "electricalType": "bidirectional",
+          "direction": "bidirectional",
+          "voltageDomainId": "vio"
+        },
+        {
+          "id": "p104",
+          "number": "I8",
+          "name": "USB3_N",
+          "group": "USB",
+          "electricalType": "bidirectional",
+          "direction": "bidirectional",
+          "voltageDomainId": "vio"
+        },
+        {
+          "id": "p105",
+          "number": "I9",
+          "name": "USB4_P",
+          "group": "USB",
+          "electricalType": "bidirectional",
+          "direction": "bidirectional",
+          "voltageDomainId": "vio"
+        },
+        {
+          "id": "p106",
+          "number": "I10",
+          "name": "USB4_N",
+          "group": "USB",
+          "electricalType": "bidirectional",
+          "direction": "bidirectional",
+          "voltageDomainId": "vio"
+        },
+        {
+          "id": "p107",
+          "number": "I11",
+          "name": "USB5_P",
+          "group": "USB",
+          "electricalType": "bidirectional",
+          "direction": "bidirectional",
+          "voltageDomainId": "vio"
+        },
+        {
+          "id": "p108",
+          "number": "I12",
+          "name": "USB5_N",
+          "group": "USB",
+          "electricalType": "bidirectional",
+          "direction": "bidirectional",
+          "voltageDomainId": "vio"
+        },
+        {
+          "id": "p109",
+          "number": "J1",
+          "name": "USB6_P",
+          "group": "USB",
+          "electricalType": "bidirectional",
+          "direction": "bidirectional",
+          "voltageDomainId": "vio"
+        },
+        {
+          "id": "p110",
+          "number": "J2",
+          "name": "USB6_N",
+          "group": "USB",
+          "electricalType": "bidirectional",
+          "direction": "bidirectional",
+          "voltageDomainId": "vio"
+        },
+        {
+          "id": "p111",
+          "number": "J3",
+          "name": "USB7_P",
+          "group": "USB",
+          "electricalType": "bidirectional",
+          "direction": "bidirectional",
+          "voltageDomainId": "vio"
+        },
+        {
+          "id": "p112",
+          "number": "J4",
+          "name": "USB7_N",
+          "group": "USB",
+          "electricalType": "bidirectional",
+          "direction": "bidirectional",
+          "voltageDomainId": "vio"
+        },
+        {
+          "id": "p113",
+          "number": "J5",
+          "name": "USB8_P",
+          "group": "USB",
+          "electricalType": "bidirectional",
+          "direction": "bidirectional",
+          "voltageDomainId": "vio"
+        },
+        {
+          "id": "p114",
+          "number": "J6",
+          "name": "USB8_N",
+          "group": "USB",
+          "electricalType": "bidirectional",
+          "direction": "bidirectional",
+          "voltageDomainId": "vio"
+        },
+        {
+          "id": "p115",
+          "number": "J7",
+          "name": "USB9_P",
+          "group": "USB",
+          "electricalType": "bidirectional",
+          "direction": "bidirectional",
+          "voltageDomainId": "vio"
+        },
+        {
+          "id": "p116",
+          "number": "J8",
+          "name": "USB9_N",
+          "group": "USB",
+          "electricalType": "bidirectional",
+          "direction": "bidirectional",
+          "voltageDomainId": "vio"
+        },
+        {
+          "id": "p117",
+          "number": "J9",
+          "name": "USB10_P",
+          "group": "USB",
+          "electricalType": "bidirectional",
+          "direction": "bidirectional",
+          "voltageDomainId": "vio"
+        },
+        {
+          "id": "p118",
+          "number": "J10",
+          "name": "USB10_N",
+          "group": "USB",
+          "electricalType": "bidirectional",
+          "direction": "bidirectional",
+          "voltageDomainId": "vio"
+        },
+        {
+          "id": "p119",
+          "number": "J11",
+          "name": "USB11_P",
+          "group": "USB",
+          "electricalType": "bidirectional",
+          "direction": "bidirectional",
+          "voltageDomainId": "vio"
+        },
+        {
+          "id": "p120",
+          "number": "J12",
+          "name": "USB11_N",
+          "group": "USB",
+          "electricalType": "bidirectional",
+          "direction": "bidirectional",
+          "voltageDomainId": "vio"
+        },
+        {
+          "id": "p121",
+          "number": "K1",
+          "name": "PCIE0_P",
+          "group": "PCIE",
+          "electricalType": "bidirectional",
+          "direction": "bidirectional",
+          "voltageDomainId": "vio"
+        },
+        {
+          "id": "p122",
+          "number": "K2",
+          "name": "PCIE0_N",
+          "group": "PCIE",
+          "electricalType": "bidirectional",
+          "direction": "bidirectional",
+          "voltageDomainId": "vio"
+        },
+        {
+          "id": "p123",
+          "number": "K3",
+          "name": "PCIE1_P",
+          "group": "PCIE",
+          "electricalType": "bidirectional",
+          "direction": "bidirectional",
+          "voltageDomainId": "vio"
+        },
+        {
+          "id": "p124",
+          "number": "K4",
+          "name": "PCIE1_N",
+          "group": "PCIE",
+          "electricalType": "bidirectional",
+          "direction": "bidirectional",
+          "voltageDomainId": "vio"
+        },
+        {
+          "id": "p125",
+          "number": "K5",
+          "name": "PCIE2_P",
+          "group": "PCIE",
+          "electricalType": "bidirectional",
+          "direction": "bidirectional",
+          "voltageDomainId": "vio"
+        },
+        {
+          "id": "p126",
+          "number": "K6",
+          "name": "PCIE2_N",
+          "group": "PCIE",
+          "electricalType": "bidirectional",
+          "direction": "bidirectional",
+          "voltageDomainId": "vio"
+        },
+        {
+          "id": "p127",
+          "number": "K7",
+          "name": "PCIE3_P",
+          "group": "PCIE",
+          "electricalType": "bidirectional",
+          "direction": "bidirectional",
+          "voltageDomainId": "vio"
+        },
+        {
+          "id": "p128",
+          "number": "K8",
+          "name": "PCIE3_N",
+          "group": "PCIE",
+          "electricalType": "bidirectional",
+          "direction": "bidirectional",
+          "voltageDomainId": "vio"
+        },
+        {
+          "id": "p129",
+          "number": "K9",
+          "name": "PCIE4_P",
+          "group": "PCIE",
+          "electricalType": "bidirectional",
+          "direction": "bidirectional",
+          "voltageDomainId": "vio"
+        },
+        {
+          "id": "p130",
+          "number": "K10",
+          "name": "PCIE4_N",
+          "group": "PCIE",
+          "electricalType": "bidirectional",
+          "direction": "bidirectional",
+          "voltageDomainId": "vio"
+        },
+        {
+          "id": "p131",
+          "number": "K11",
+          "name": "PCIE5_P",
+          "group": "PCIE",
+          "electricalType": "bidirectional",
+          "direction": "bidirectional",
+          "voltageDomainId": "vio"
+        },
+        {
+          "id": "p132",
+          "number": "K12",
+          "name": "PCIE5_N",
+          "group": "PCIE",
+          "electricalType": "bidirectional",
+          "direction": "bidirectional",
+          "voltageDomainId": "vio"
+        },
+        {
+          "id": "p133",
+          "number": "L1",
+          "name": "PCIE6_P",
+          "group": "PCIE",
+          "electricalType": "bidirectional",
+          "direction": "bidirectional",
+          "voltageDomainId": "vio"
+        },
+        {
+          "id": "p134",
+          "number": "L2",
+          "name": "PCIE6_N",
+          "group": "PCIE",
+          "electricalType": "bidirectional",
+          "direction": "bidirectional",
+          "voltageDomainId": "vio"
+        },
+        {
+          "id": "p135",
+          "number": "L3",
+          "name": "PCIE7_P",
+          "group": "PCIE",
+          "electricalType": "bidirectional",
+          "direction": "bidirectional",
+          "voltageDomainId": "vio"
+        },
+        {
+          "id": "p136",
+          "number": "L4",
+          "name": "PCIE7_N",
+          "group": "PCIE",
+          "electricalType": "bidirectional",
+          "direction": "bidirectional",
+          "voltageDomainId": "vio"
+        },
+        {
+          "id": "p137",
+          "number": "L5",
+          "name": "PCIE8_P",
+          "group": "PCIE",
+          "electricalType": "bidirectional",
+          "direction": "bidirectional",
+          "voltageDomainId": "vio"
+        },
+        {
+          "id": "p138",
+          "number": "L6",
+          "name": "PCIE8_N",
+          "group": "PCIE",
+          "electricalType": "bidirectional",
+          "direction": "bidirectional",
+          "voltageDomainId": "vio"
+        },
+        {
+          "id": "p139",
+          "number": "L7",
+          "name": "PCIE9_P",
+          "group": "PCIE",
+          "electricalType": "bidirectional",
+          "direction": "bidirectional",
+          "voltageDomainId": "vio"
+        },
+        {
+          "id": "p140",
+          "number": "L8",
+          "name": "PCIE9_N",
+          "group": "PCIE",
+          "electricalType": "bidirectional",
+          "direction": "bidirectional",
+          "voltageDomainId": "vio"
+        },
+        {
+          "id": "p141",
+          "number": "L9",
+          "name": "PCIE10_P",
+          "group": "PCIE",
+          "electricalType": "bidirectional",
+          "direction": "bidirectional",
+          "voltageDomainId": "vio"
+        },
+        {
+          "id": "p142",
+          "number": "L10",
+          "name": "PCIE10_N",
+          "group": "PCIE",
+          "electricalType": "bidirectional",
+          "direction": "bidirectional",
+          "voltageDomainId": "vio"
+        },
+        {
+          "id": "p143",
+          "number": "L11",
+          "name": "PCIE11_P",
+          "group": "PCIE",
+          "electricalType": "bidirectional",
+          "direction": "bidirectional",
+          "voltageDomainId": "vio"
+        },
+        {
+          "id": "p144",
+          "number": "L12",
+          "name": "PCIE11_N",
+          "group": "PCIE",
+          "electricalType": "bidirectional",
+          "direction": "bidirectional",
+          "voltageDomainId": "vio"
+        }
+      ],
+      "voltageDomains": [
+        {
+          "id": "vcore",
+          "name": "Core supply",
+          "minVoltage": 0.75,
+          "maxVoltage": 0.95
+        },
+        {
+          "id": "vio",
+          "name": "I/O supply",
+          "minVoltage": 1.7,
+          "maxVoltage": 3.6
+        },
+        {
+          "id": "vddr",
+          "name": "DDR supply",
+          "minVoltage": 1.1,
+          "maxVoltage": 1.25
+        }
+      ],
+      "alternateFunctions": [
+        {
+          "pinId": "p73",
+          "functions": ["GPIO0", "UART0_TX", "SPI0_0"]
+        },
+        {
+          "pinId": "p74",
+          "functions": ["GPIO1", "UART1_RX", "SPI1_1"]
+        },
+        {
+          "pinId": "p75",
+          "functions": ["GPIO2", "UART2_TX", "SPI2_2"]
+        },
+        {
+          "pinId": "p76",
+          "functions": ["GPIO3", "UART3_RX", "SPI0_3"]
+        },
+        {
+          "pinId": "p77",
+          "functions": ["GPIO4", "UART0_TX", "SPI1_0"]
+        },
+        {
+          "pinId": "p78",
+          "functions": ["GPIO5", "UART1_RX", "SPI2_1"]
+        },
+        {
+          "pinId": "p79",
+          "functions": ["GPIO6", "UART2_TX", "SPI0_2"]
+        },
+        {
+          "pinId": "p80",
+          "functions": ["GPIO7", "UART3_RX", "SPI1_3"]
+        },
+        {
+          "pinId": "p81",
+          "functions": ["GPIO8", "UART0_TX", "SPI2_0"]
+        },
+        {
+          "pinId": "p82",
+          "functions": ["GPIO9", "UART1_RX", "SPI0_1"]
+        },
+        {
+          "pinId": "p83",
+          "functions": ["GPIO10", "UART2_TX", "SPI1_2"]
+        },
+        {
+          "pinId": "p84",
+          "functions": ["GPIO11", "UART3_RX", "SPI2_3"]
+        },
+        {
+          "pinId": "p85",
+          "functions": ["GPIO12", "UART0_TX", "SPI0_0"]
+        },
+        {
+          "pinId": "p86",
+          "functions": ["GPIO13", "UART1_RX", "SPI1_1"]
+        },
+        {
+          "pinId": "p87",
+          "functions": ["GPIO14", "UART2_TX", "SPI2_2"]
+        },
+        {
+          "pinId": "p88",
+          "functions": ["GPIO15", "UART3_RX", "SPI0_3"]
+        },
+        {
+          "pinId": "p89",
+          "functions": ["GPIO16", "UART0_TX", "SPI1_0"]
+        },
+        {
+          "pinId": "p90",
+          "functions": ["GPIO17", "UART1_RX", "SPI2_1"]
+        },
+        {
+          "pinId": "p91",
+          "functions": ["GPIO18", "UART2_TX", "SPI0_2"]
+        },
+        {
+          "pinId": "p92",
+          "functions": ["GPIO19", "UART3_RX", "SPI1_3"]
+        },
+        {
+          "pinId": "p93",
+          "functions": ["GPIO20", "UART0_TX", "SPI2_0"]
+        },
+        {
+          "pinId": "p94",
+          "functions": ["GPIO21", "UART1_RX", "SPI0_1"]
+        },
+        {
+          "pinId": "p95",
+          "functions": ["GPIO22", "UART2_TX", "SPI1_2"]
+        },
+        {
+          "pinId": "p96",
+          "functions": ["GPIO23", "UART3_RX", "SPI2_3"]
+        }
+      ],
+      "differentialPairs": [
+        {
+          "id": "usb0",
+          "positivePinId": "p97",
+          "negativePinId": "p98"
+        },
+        {
+          "id": "usb1",
+          "positivePinId": "p99",
+          "negativePinId": "p100"
+        },
+        {
+          "id": "usb2",
+          "positivePinId": "p101",
+          "negativePinId": "p102"
+        },
+        {
+          "id": "usb3",
+          "positivePinId": "p103",
+          "negativePinId": "p104"
+        },
+        {
+          "id": "usb4",
+          "positivePinId": "p105",
+          "negativePinId": "p106"
+        },
+        {
+          "id": "usb5",
+          "positivePinId": "p107",
+          "negativePinId": "p108"
+        },
+        {
+          "id": "usb6",
+          "positivePinId": "p109",
+          "negativePinId": "p110"
+        },
+        {
+          "id": "usb7",
+          "positivePinId": "p111",
+          "negativePinId": "p112"
+        },
+        {
+          "id": "usb8",
+          "positivePinId": "p113",
+          "negativePinId": "p114"
+        },
+        {
+          "id": "usb9",
+          "positivePinId": "p115",
+          "negativePinId": "p116"
+        },
+        {
+          "id": "usb10",
+          "positivePinId": "p117",
+          "negativePinId": "p118"
+        },
+        {
+          "id": "usb11",
+          "positivePinId": "p119",
+          "negativePinId": "p120"
+        },
+        {
+          "id": "pcie0",
+          "positivePinId": "p121",
+          "negativePinId": "p122"
+        },
+        {
+          "id": "pcie1",
+          "positivePinId": "p123",
+          "negativePinId": "p124"
+        },
+        {
+          "id": "pcie2",
+          "positivePinId": "p125",
+          "negativePinId": "p126"
+        },
+        {
+          "id": "pcie3",
+          "positivePinId": "p127",
+          "negativePinId": "p128"
+        },
+        {
+          "id": "pcie4",
+          "positivePinId": "p129",
+          "negativePinId": "p130"
+        },
+        {
+          "id": "pcie5",
+          "positivePinId": "p131",
+          "negativePinId": "p132"
+        },
+        {
+          "id": "pcie6",
+          "positivePinId": "p133",
+          "negativePinId": "p134"
+        },
+        {
+          "id": "pcie7",
+          "positivePinId": "p135",
+          "negativePinId": "p136"
+        },
+        {
+          "id": "pcie8",
+          "positivePinId": "p137",
+          "negativePinId": "p138"
+        },
+        {
+          "id": "pcie9",
+          "positivePinId": "p139",
+          "negativePinId": "p140"
+        },
+        {
+          "id": "pcie10",
+          "positivePinId": "p141",
+          "negativePinId": "p142"
+        },
+        {
+          "id": "pcie11",
+          "positivePinId": "p143",
+          "negativePinId": "p144"
+        }
+      ],
+      "rules": [
+        {
+          "id": "supply-required",
+          "kind": "powerInput",
+          "pinIds": [
+            "p2",
+            "p4",
+            "p6",
+            "p8",
+            "p10",
+            "p12",
+            "p14",
+            "p16",
+            "p18",
+            "p20",
+            "p22",
+            "p24"
+          ],
+          "message": "All exposed supply inputs require a connection"
+        },
+        {
+          "id": "core-required",
+          "kind": "required",
+          "pinIds": ["p25", "p26", "p27", "p28"],
+          "message": "Core strap pins require defined levels"
+        },
+        {
+          "id": "unused-io",
+          "kind": "allowFloating",
+          "pinIds": [
+            "p49",
+            "p50",
+            "p51",
+            "p52",
+            "p53",
+            "p54",
+            "p55",
+            "p56",
+            "p57",
+            "p58",
+            "p59",
+            "p60",
+            "p61",
+            "p62",
+            "p63",
+            "p64",
+            "p65",
+            "p66",
+            "p67",
+            "p68",
+            "p69",
+            "p70",
+            "p71",
+            "p72",
+            "p73",
+            "p74",
+            "p75",
+            "p76",
+            "p77",
+            "p78",
+            "p79",
+            "p80",
+            "p81",
+            "p82",
+            "p83",
+            "p84",
+            "p85",
+            "p86",
+            "p87",
+            "p88",
+            "p89",
+            "p90",
+            "p91",
+            "p92",
+            "p93",
+            "p94",
+            "p95",
+            "p96"
+          ],
+          "message": "Unused test I/O may float"
+        }
+      ],
+      "modelIds": ["soc-ibis-interface", "soc-pcie-s4p"],
+      "sdkAdapterIds": ["soc-sdk-interface"]
+    }
+  ],
+  "symbols": [
+    {
+      "id": "soc-symbol",
+      "name": "Multi-unit grouped SoC",
+      "units": [
+        {
+          "id": "power",
+          "name": "POWER",
+          "groups": ["POWER"]
+        },
+        {
+          "id": "core",
+          "name": "CORE",
+          "groups": ["CORE"]
+        },
+        {
+          "id": "ddr",
+          "name": "DDR",
+          "groups": ["DDR"]
+        },
+        {
+          "id": "gpio",
+          "name": "GPIO",
+          "groups": ["GPIO"]
+        },
+        {
+          "id": "usb",
+          "name": "USB",
+          "groups": ["USB"]
+        },
+        {
+          "id": "pcie",
+          "name": "PCIE",
+          "groups": ["PCIE"]
+        }
+      ]
+    }
+  ],
+  "packages": [
+    {
+      "id": "bga144",
+      "name": "BGA-144 test footprint",
+      "kind": "BGA",
+      "pads": [
+        "A1",
+        "A2",
+        "A3",
+        "A4",
+        "A5",
+        "A6",
+        "A7",
+        "A8",
+        "A9",
+        "A10",
+        "A11",
+        "A12",
+        "B1",
+        "B2",
+        "B3",
+        "B4",
+        "B5",
+        "B6",
+        "B7",
+        "B8",
+        "B9",
+        "B10",
+        "B11",
+        "B12",
+        "C1",
+        "C2",
+        "C3",
+        "C4",
+        "C5",
+        "C6",
+        "C7",
+        "C8",
+        "C9",
+        "C10",
+        "C11",
+        "C12",
+        "D1",
+        "D2",
+        "D3",
+        "D4",
+        "D5",
+        "D6",
+        "D7",
+        "D8",
+        "D9",
+        "D10",
+        "D11",
+        "D12",
+        "E1",
+        "E2",
+        "E3",
+        "E4",
+        "E5",
+        "E6",
+        "E7",
+        "E8",
+        "E9",
+        "E10",
+        "E11",
+        "E12",
+        "F1",
+        "F2",
+        "F3",
+        "F4",
+        "F5",
+        "F6",
+        "F7",
+        "F8",
+        "F9",
+        "F10",
+        "F11",
+        "F12",
+        "G1",
+        "G2",
+        "G3",
+        "G4",
+        "G5",
+        "G6",
+        "G7",
+        "G8",
+        "G9",
+        "G10",
+        "G11",
+        "G12",
+        "H1",
+        "H2",
+        "H3",
+        "H4",
+        "H5",
+        "H6",
+        "H7",
+        "H8",
+        "H9",
+        "H10",
+        "H11",
+        "H12",
+        "I1",
+        "I2",
+        "I3",
+        "I4",
+        "I5",
+        "I6",
+        "I7",
+        "I8",
+        "I9",
+        "I10",
+        "I11",
+        "I12",
+        "J1",
+        "J2",
+        "J3",
+        "J4",
+        "J5",
+        "J6",
+        "J7",
+        "J8",
+        "J9",
+        "J10",
+        "J11",
+        "J12",
+        "K1",
+        "K2",
+        "K3",
+        "K4",
+        "K5",
+        "K6",
+        "K7",
+        "K8",
+        "K9",
+        "K10",
+        "K11",
+        "K12",
+        "L1",
+        "L2",
+        "L3",
+        "L4",
+        "L5",
+        "L6",
+        "L7",
+        "L8",
+        "L9",
+        "L10",
+        "L11",
+        "L12"
+      ]
+    }
+  ],
+  "models": [
+    {
+      "id": "soc-ibis-interface",
+      "kind": "ibis",
+      "format": "ibis-7-metadata",
+      "metadata": {
+        "status": "interface metadata only",
+        "connector": "future-ibis-backend"
+      }
+    },
+    {
+      "id": "soc-pcie-s4p",
+      "kind": "sParameter",
+      "format": "touchstone-metadata",
+      "metadata": {
+        "status": "interface metadata only",
+        "ports": "4"
+      }
+    }
+  ],
+  "sdkAdapters": [
+    {
+      "id": "soc-sdk-interface",
+      "sdkType": "fictional-soc-sdk",
+      "versionRequirement": ">=0.1",
+      "localPathPatterns": ["sdk/*/include", "device-tree/*.dtsi"],
+      "metadata": {
+        "status": "metadata-only; no SDK bundled"
+      }
+    }
+  ],
+  "documents": [
+    {
+      "kind": "hardwareDesignGuide",
+      "title": "SugarEDA STSOC144 Test Hardware Guide",
+      "sourceUrl": "https://example.invalid/sugareda/stsoc144",
+      "revision": "1.0",
+      "license": "CC0-1.0"
+    }
+  ]
+}

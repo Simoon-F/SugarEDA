@@ -1,3 +1,4 @@
+use crate::device_pack::EmbeddedDevicePack;
 use crate::domain::{
     component, modeled_component, Analysis, Component, ComponentKind, Point, Project,
     SimulationProfile, SpiceLibrary, Wire,
@@ -41,6 +42,13 @@ pub enum EditorCommand {
         model_name: String,
         position: Point,
     },
+    AddDeviceComponent {
+        pack_sha256: String,
+        device_id: String,
+        variant_id: Option<String>,
+        unit_id: Option<String>,
+        position: Point,
+    },
     MoveComponent {
         id: Uuid,
         position: Point,
@@ -58,6 +66,11 @@ pub enum EditorCommand {
     },
     RotateComponent {
         id: Uuid,
+    },
+    SetPinNoConnect {
+        component_id: Uuid,
+        pin_id: String,
+        no_connect: bool,
     },
     DeleteSelection {
         component_ids: Vec<Uuid>,
@@ -187,6 +200,11 @@ impl Workspace {
                     }
                     ComponentKind::Ground => ("", ""),
                     ComponentKind::NetLabel => ("", "net"),
+                    ComponentKind::Device => {
+                        return Err(
+                            "Device-pack components must be added from the device library".into(),
+                        )
+                    }
                 };
                 let mut number = 1;
                 while !prefix.is_empty()
@@ -244,6 +262,23 @@ impl Workspace {
                     position,
                     &format!("{prefix}{number}"),
                 ));
+            }
+            EditorCommand::AddDeviceComponent {
+                pack_sha256,
+                device_id,
+                variant_id,
+                unit_id,
+                position,
+            } => {
+                let component = crate::device_pack::instantiate(
+                    &self.project,
+                    &pack_sha256,
+                    &device_id,
+                    variant_id.as_deref(),
+                    unit_id.as_deref(),
+                    position,
+                )?;
+                self.project.sheets[0].components.push(component);
             }
             EditorCommand::MoveComponent { id, position } => {
                 let sheet = &mut self.project.sheets[0];
@@ -347,6 +382,19 @@ impl Workspace {
             EditorCommand::RotateComponent { id } => {
                 let target = self.component_mut(id)?;
                 target.rotation = (target.rotation + 90) % 360;
+            }
+            EditorCommand::SetPinNoConnect {
+                component_id,
+                pin_id,
+                no_connect,
+            } => {
+                let component = self.component_mut(component_id)?;
+                let pin = component
+                    .pins
+                    .iter_mut()
+                    .find(|pin| pin.id == pin_id)
+                    .ok_or_else(|| format!("Pin '{pin_id}' no longer exists"))?;
+                pin.no_connect = no_connect;
             }
             EditorCommand::DeleteSelection {
                 component_ids,
@@ -524,6 +572,52 @@ impl Workspace {
         }
         Ok(())
     }
+
+    pub fn add_device_pack(
+        &mut self,
+        pack: EmbeddedDevicePack,
+        libraries: Vec<SpiceLibrary>,
+    ) -> Result<(), String> {
+        crate::device_pack::validate(&pack.pack).map_err(|error| error.to_string())?;
+        if self
+            .project
+            .device_packs
+            .iter()
+            .any(|existing| existing.sha256 == pack.sha256)
+        {
+            return Ok(());
+        }
+        if let Some(existing) = self.project.device_packs.iter().find(|existing| {
+            existing.pack.manifest.id == pack.pack.manifest.id
+                && existing.pack.manifest.version == pack.pack.manifest.version
+        }) {
+            return Err(format!(
+                "Device pack {} version {} is already embedded with a different content hash ({})",
+                pack.pack.manifest.id, pack.pack.manifest.version, existing.sha256
+            ));
+        }
+        let before = self.project.clone();
+        for library in libraries {
+            if !self
+                .project
+                .spice_libraries
+                .iter()
+                .any(|existing| existing.sha256 == library.sha256)
+            {
+                crate::models::validate_library(&library).map_err(|error| error.to_string())?;
+                self.project.spice_libraries.push(library);
+            }
+        }
+        self.project.device_packs.push(pack);
+        self.project.updated_at = Utc::now();
+        self.undo.push(before);
+        if self.undo.len() > 100 {
+            self.undo.remove(0);
+        }
+        self.redo.clear();
+        self.dirty = true;
+        Ok(())
+    }
 }
 
 fn validate_wire_points(points: &[Point]) -> Result<(), String> {
@@ -684,6 +778,42 @@ mod tests {
         assert!(w.project.sheets[0].components.is_empty());
         assert!(w.redo());
         assert_eq!(w.project.sheets[0].components.len(), 1);
+    }
+
+    #[test]
+    fn importing_and_placing_a_device_pack_is_undoable_and_conflict_safe() {
+        let pack = crate::device_pack::import_bytes(include_bytes!(
+            "../../examples/devicepacks/test-mcu.devicepack.json"
+        ))
+        .unwrap();
+        let mut workspace = Workspace::new(Project::blank("packs"));
+        workspace.add_device_pack(pack.clone(), vec![]).unwrap();
+        workspace
+            .apply(EditorCommand::AddDeviceComponent {
+                pack_sha256: pack.sha256.clone(),
+                device_id: "stmcu24".into(),
+                variant_id: Some("industrial".into()),
+                unit_id: Some("core".into()),
+                position: Point { x: 200.0, y: 200.0 },
+            })
+            .unwrap();
+        assert_eq!(
+            workspace.project.sheets[0].components[0].kind,
+            ComponentKind::Device
+        );
+        assert!(workspace.undo());
+        assert!(workspace.project.sheets[0].components.is_empty());
+
+        let mut conflict = pack;
+        conflict.pack.manifest.name.push_str(" changed");
+        conflict.sha256 = crate::device_pack::content_hash(&conflict.pack);
+        assert!(workspace.add_device_pack(conflict, vec![]).is_err());
+
+        let mut next_version = workspace.project.device_packs[0].clone();
+        next_version.pack.manifest.version = "1.1.0".into();
+        next_version.sha256 = crate::device_pack::content_hash(&next_version.pack);
+        workspace.add_device_pack(next_version, vec![]).unwrap();
+        assert_eq!(workspace.project.device_packs.len(), 2);
     }
 
     #[test]

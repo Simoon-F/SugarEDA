@@ -21,15 +21,18 @@ export class SchematicSpatialIndex {
   private wireBuckets = new Map<string, Wire[]>();
 
   constructor(components: Component[], wires: Wire[]) {
-    for (const component of components)
+    for (const component of components) {
+      const halfWidth = Math.max(80, (component.symbolWidth ?? 0) / 2 + 30);
+      const halfHeight = Math.max(80, (component.symbolHeight ?? 0) / 2 + 30);
       this.addToBuckets(
         this.componentBuckets,
         component,
-        component.position.x - 80,
-        component.position.y - 80,
-        component.position.x + 80,
-        component.position.y + 80,
+        component.position.x - halfWidth,
+        component.position.y - halfHeight,
+        component.position.x + halfWidth,
+        component.position.y + halfHeight,
       );
+    }
     for (const wire of wires) {
       if (!wire.points.length) continue;
       let left = wire.points[0].x;

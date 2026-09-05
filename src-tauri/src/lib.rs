@@ -1,5 +1,7 @@
 mod application;
+mod device_pack;
 mod domain;
+mod erc;
 mod export;
 mod models;
 mod netlist;
@@ -199,6 +201,31 @@ fn import_spice_library(
     workspace.add_spice_library(library)?;
     Ok(workspace.snapshot())
 }
+
+#[tauri::command]
+fn import_device_pack(
+    path: String,
+    state: State<'_, AppState>,
+) -> Result<WorkspaceSnapshot, String> {
+    let pack = device_pack::import(&PathBuf::from(path)).map_err(|error| error.to_string())?;
+    let libraries =
+        device_pack::embedded_spice_libraries(&pack).map_err(|error| error.to_string())?;
+    let mut workspace = state
+        .workspace
+        .lock()
+        .map_err(|_| "Workspace lock was poisoned".to_owned())?;
+    workspace.add_device_pack(pack, libraries)?;
+    Ok(workspace.snapshot())
+}
+
+#[tauri::command]
+fn run_erc(state: State<'_, AppState>) -> Result<crate::erc::ErcReport, String> {
+    let workspace = state
+        .workspace
+        .lock()
+        .map_err(|_| "Workspace lock was poisoned".to_owned())?;
+    Ok(crate::erc::check(&workspace.project))
+}
 #[tauri::command]
 fn simulation_status(configured_path: Option<String>, state: State<'_, AppState>) -> BackendStatus {
     state.simulator.status(configured_path.as_deref())
@@ -280,6 +307,8 @@ pub fn run() {
             generate_netlist,
             simulation_check,
             import_spice_library,
+            import_device_pack,
+            run_erc,
             export_waveform,
             simulation_status,
             run_simulation,

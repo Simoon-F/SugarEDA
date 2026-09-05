@@ -78,7 +78,7 @@ fn validate_extension(path: &Path) -> Result<(), ModelImportError> {
     valid.then_some(()).ok_or(ModelImportError::Extension)
 }
 
-fn inspect(content: &str) -> Result<Vec<SpiceModelDefinition>, ModelImportError> {
+pub(crate) fn inspect(content: &str) -> Result<Vec<SpiceModelDefinition>, ModelImportError> {
     if content.len() as u64 > MAX_MODEL_BYTES {
         return Err(ModelImportError::TooLarge);
     }

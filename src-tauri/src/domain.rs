@@ -3,7 +3,7 @@ use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
 use uuid::Uuid;
 
-pub const SCHEMA_VERSION: u32 = 2;
+pub const SCHEMA_VERSION: u32 = 3;
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(rename_all = "camelCase")]
@@ -14,6 +14,9 @@ pub struct Project {
     pub simulation_profiles: Vec<SimulationProfile>,
     #[serde(default)]
     pub spice_libraries: Vec<SpiceLibrary>,
+    /// Validated, content-addressed device packs embedded in the project.
+    #[serde(default)]
+    pub device_packs: Vec<crate::device_pack::EmbeddedDevicePack>,
     pub active_simulation_profile: Option<Uuid>,
     pub ui_view_state: UiViewState,
     pub created_at: DateTime<Utc>,
@@ -55,6 +58,12 @@ pub struct Component {
     pub spice_ref: String,
     #[serde(default)]
     pub model: Option<ModelBinding>,
+    #[serde(default)]
+    pub device: Option<DeviceBinding>,
+    #[serde(default)]
+    pub symbol_width: Option<f64>,
+    #[serde(default)]
+    pub symbol_height: Option<f64>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -71,6 +80,7 @@ pub enum ComponentKind {
     Subcircuit,
     Ground,
     NetLabel,
+    Device,
 }
 
 impl ComponentKind {
@@ -85,20 +95,73 @@ impl ComponentKind {
             Self::BipolarTransistor => "Q",
             Self::Mosfet => "M",
             Self::Subcircuit => "X",
+            Self::Device => "U",
             Self::Ground | Self::NetLabel => "",
         }
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Default)]
 #[serde(rename_all = "camelCase")]
 pub struct Pin {
     pub id: String,
     pub name: String,
     pub offset: Point,
+    #[serde(default)]
+    pub number: Option<String>,
+    #[serde(default)]
+    pub group: Option<String>,
+    #[serde(default)]
+    pub electrical_type: Option<PinElectricalType>,
+    #[serde(default)]
+    pub direction: Option<String>,
+    #[serde(default)]
+    pub voltage_domain_id: Option<String>,
+    #[serde(default)]
+    pub voltage_min: Option<f64>,
+    #[serde(default)]
+    pub voltage_max: Option<f64>,
+    #[serde(default)]
+    pub alternate_functions: Vec<String>,
+    #[serde(default)]
+    pub differential_pair_id: Option<String>,
+    #[serde(default)]
+    pub differential_polarity: Option<String>,
+    #[serde(default)]
+    pub required: bool,
+    #[serde(default)]
+    pub allow_floating: bool,
+    #[serde(default)]
+    pub no_connect: bool,
 }
 
-#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub enum PinElectricalType {
+    Passive,
+    Input,
+    Output,
+    Bidirectional,
+    OpenDrain,
+    OpenCollector,
+    PowerInput,
+    PowerOutput,
+    NoConnect,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct DeviceBinding {
+    pub pack_sha256: String,
+    pub pack_id: String,
+    pub pack_version: String,
+    pub device_id: String,
+    pub variant_id: Option<String>,
+    pub symbol_unit_id: Option<String>,
+    pub capabilities: Vec<crate::device_pack::DevicePackCapability>,
+}
+
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Default)]
 pub struct Point {
     pub x: f64,
     pub y: f64,
@@ -226,6 +289,7 @@ impl Project {
                 signals: vec!["v(in)".into(), "v(out)".into()],
             }],
             spice_libraries: vec![],
+            device_packs: vec![],
             active_simulation_profile: Some(profile_id),
             ui_view_state: UiViewState {
                 active_sheet_id: sheet_id,
@@ -249,12 +313,14 @@ pub fn component(kind: ComponentKind, x: f64, y: f64, spice_ref: &str, value: &s
             id: "1".into(),
             name: "NET".into(),
             offset: Point { x: 0.0, y: 0.0 },
+            ..Pin::default()
         }]
     } else if kind == ComponentKind::Ground {
         vec![Pin {
             id: "1".into(),
             name: "GND".into(),
             offset: Point { x: 0.0, y: -20.0 },
+            ..Pin::default()
         }]
     } else if vertical {
         vec![
@@ -262,11 +328,13 @@ pub fn component(kind: ComponentKind, x: f64, y: f64, spice_ref: &str, value: &s
                 id: "1".into(),
                 name: "+".into(),
                 offset: Point { x: 0.0, y: -30.0 },
+                ..Pin::default()
             },
             Pin {
                 id: "2".into(),
                 name: "-".into(),
                 offset: Point { x: 0.0, y: 30.0 },
+                ..Pin::default()
             },
         ]
     } else {
@@ -275,11 +343,13 @@ pub fn component(kind: ComponentKind, x: f64, y: f64, spice_ref: &str, value: &s
                 id: "1".into(),
                 name: "1".into(),
                 offset: Point { x: -40.0, y: 0.0 },
+                ..Pin::default()
             },
             Pin {
                 id: "2".into(),
                 name: "2".into(),
                 offset: Point { x: 40.0, y: 0.0 },
+                ..Pin::default()
             },
         ]
     };
@@ -295,6 +365,9 @@ pub fn component(kind: ComponentKind, x: f64, y: f64, spice_ref: &str, value: &s
         display_name: spice_ref.into(),
         spice_ref: spice_ref.into(),
         model: None,
+        device: None,
+        symbol_width: None,
+        symbol_height: None,
     }
 }
 
@@ -345,6 +418,7 @@ pub fn modeled_component(
                 id: (index + 1).to_string(),
                 name: name.clone(),
                 offset,
+                ..Pin::default()
             }
         })
         .collect();
@@ -362,6 +436,9 @@ pub fn modeled_component(
             model_name: definition.name.clone(),
             kind: definition.kind.clone(),
         }),
+        device: None,
+        symbol_width: None,
+        symbol_height: None,
     }
 }
 

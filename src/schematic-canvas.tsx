@@ -189,14 +189,23 @@ export const SchematicCanvas = memo(function SchematicCanvas({
     (selection: ComponentPlacement, world: Point) => {
       const position = componentSnap(selection.kind, world);
       onCommand(
-        selection.model
+        selection.device
           ? {
-              action: "addModelComponent",
-              libraryId: selection.model.libraryId,
-              modelName: selection.model.modelName,
+              action: "addDeviceComponent",
+              packSha256: selection.device.packSha256,
+              deviceId: selection.device.deviceId,
+              variantId: selection.device.variantId ?? null,
+              unitId: selection.device.unitId ?? null,
               position,
             }
-          : { action: "addComponent", kind: selection.kind, position },
+          : selection.model
+            ? {
+                action: "addModelComponent",
+                libraryId: selection.model.libraryId,
+                modelName: selection.model.modelName,
+                position,
+              }
+            : { action: "addComponent", kind: selection.kind, position },
       );
     },
     [componentSnap, onCommand],
@@ -528,7 +537,12 @@ export const SchematicCanvas = memo(function SchematicCanvas({
     for (const component of visibleItems.components) {
       const dragPoint = drag?.id === component.id ? draggedPosition : undefined;
       const displayedPosition = dragPoint ?? component.position;
-      if (!pointVisible(displayedPosition, 80)) continue;
+      const componentMargin = Math.max(
+        80,
+        (component.symbolWidth ?? 0) / 2 + 30,
+        (component.symbolHeight ?? 0) / 2 + 30,
+      );
+      if (!pointVisible(displayedPosition, componentMargin)) continue;
       const disconnectedLabel =
         component.kind === "netLabel" &&
         (drag?.id === component.id
@@ -708,11 +722,17 @@ export const SchematicCanvas = memo(function SchematicCanvas({
           dy = (screen.y - p.y) / view.zoom;
         const x = dx * Math.cos(angle) - dy * Math.sin(angle);
         const y = dx * Math.sin(angle) + dy * Math.cos(angle);
-        const halfHeight =
-          c.kind === "subcircuit"
+        const halfHeight = c.symbolHeight
+          ? c.symbolHeight / 2
+          : c.kind === "subcircuit" || c.kind === "device"
             ? Math.max(38, ...c.pins.map((pin) => Math.abs(pin.offset.y) + 10))
             : 38;
-        return Math.abs(x) < 52 && Math.abs(y) < halfHeight;
+        const halfWidth = c.symbolWidth
+          ? c.symbolWidth / 2 + 22
+          : c.kind === "device"
+            ? Math.max(52, ...c.pins.map((pin) => Math.abs(pin.offset.x)))
+            : 52;
+        return Math.abs(x) < halfWidth && Math.abs(y) < halfHeight;
       });
   const hitWire = (screen: Point) =>
     hitCandidates(screen)
@@ -1296,14 +1316,39 @@ function drawComponent(
     ctx.lineTo(20, -30);
     ctx.moveTo(-4, 11);
     ctx.lineTo(20, 30);
-  } else if (c.kind === "subcircuit") {
+  } else if (c.kind === "subcircuit" || c.kind === "device") {
     const ys = c.pins.map((pin) => pin.offset.y);
-    const top = Math.min(-24, ...ys) - 10;
-    const bottom = Math.max(24, ...ys) + 10;
-    ctx.rect(-32, top, 64, bottom - top);
+    const halfWidth = (c.symbolWidth ?? 64) / 2;
+    const top = c.symbolHeight
+      ? -c.symbolHeight / 2
+      : Math.min(-24, ...ys) - 10;
+    const bottom = c.symbolHeight
+      ? c.symbolHeight / 2
+      : Math.max(24, ...ys) + 10;
+    ctx.rect(-halfWidth, top, halfWidth * 2, bottom - top);
+    if (c.kind === "device") {
+      ctx.fillStyle = "#f8fbff";
+      ctx.fillRect(
+        -halfWidth + 1,
+        top + 1,
+        halfWidth * 2 - 2,
+        bottom - top - 2,
+      );
+      ctx.fillStyle = "#2869df";
+      ctx.fillRect(-halfWidth + 1, top + 1, halfWidth * 2 - 2, 22);
+      ctx.fillStyle = "#ffffff";
+      ctx.font = "700 10px SFMono-Regular, monospace";
+      ctx.textAlign = "center";
+      ctx.fillText(
+        (c.device?.symbolUnitId || "DEVICE").toUpperCase(),
+        0,
+        top + 15,
+      );
+      ctx.textAlign = "left";
+    }
     for (const pin of c.pins) {
       ctx.moveTo(pin.offset.x, pin.offset.y);
-      ctx.lineTo(pin.offset.x < 0 ? -32 : 32, pin.offset.y);
+      ctx.lineTo(pin.offset.x < 0 ? -halfWidth : halfWidth, pin.offset.y);
     }
   } else if (c.kind === "voltageSource" || c.kind === "currentSource") {
     ctx.moveTo(0, -30);
@@ -1345,13 +1390,13 @@ function drawComponent(
     ctx.closePath();
   }
   ctx.stroke();
-  if (c.model) {
+  if (c.model || c.device) {
     ctx.font = "11px SFMono-Regular, monospace";
     ctx.fillStyle = "#6b7280";
     for (const pin of c.pins) {
       ctx.textAlign = pin.offset.x < 0 ? "left" : "right";
       ctx.fillText(
-        pin.name,
+        `${pin.number ? `${pin.number} ` : ""}${pin.name}${pin.noConnect ? " ×" : ""}`,
         pin.offset.x + (pin.offset.x < 0 ? 7 : -7),
         pin.offset.y - 5,
       );
@@ -1385,7 +1430,7 @@ function drawComponent(
   ctx.font = "12px SFMono-Regular, monospace";
   if (c.kind !== "netLabel")
     ctx.fillText(
-      c.model?.modelName || c.parameters.value || "",
+      c.model?.modelName || c.device?.deviceId || c.parameters.value || "",
       center.x + 10,
       center.y + 30,
     );

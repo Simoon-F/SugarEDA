@@ -7,6 +7,7 @@ import type {
   SimulationCheckReport,
   SimulationResult,
   Snapshot,
+  ErcReport,
 } from "./types";
 export const isDesktop = () => "__TAURI_INTERNALS__" in window;
 export const api = {
@@ -31,6 +32,9 @@ export const api = {
   check: () => invoke<SimulationCheckReport>("simulation_check"),
   importSpiceLibrary: (path: string) =>
     invoke<Snapshot>("import_spice_library", { path }),
+  importDevicePack: (path: string) =>
+    invoke<Snapshot>("import_device_pack", { path }),
+  erc: () => invoke<ErcReport>("run_erc"),
   exportWaveform: (path: string, csv: string) =>
     invoke<void>("export_waveform", { path, csv }),
   status: (configuredPath?: string) =>

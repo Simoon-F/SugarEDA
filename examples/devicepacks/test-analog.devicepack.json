@@ -1,0 +1,142 @@
+{
+  "manifest": {
+    "formatVersion": 1,
+    "id": "org.sugareda.test.analog",
+    "name": "SugarEDA Test Analog",
+    "vendor": "SugarEDA Project",
+    "version": "1.0.0",
+    "source": "SugarEDA self-contained test fixture",
+    "license": "CC0-1.0",
+    "description": "Fictional test data; not derived from any real vendor device."
+  },
+  "devices": [
+    {
+      "id": "sta100",
+      "name": "STA100 Test Op Amp",
+      "deviceType": "analog",
+      "symbolId": "opamp",
+      "packageId": "dip8",
+      "variants": [],
+      "pins": [
+        {
+          "id": "inp",
+          "number": "3",
+          "name": "INP",
+          "group": "ANALOG",
+          "electricalType": "input",
+          "direction": "input"
+        },
+        {
+          "id": "inm",
+          "number": "2",
+          "name": "INM",
+          "group": "ANALOG",
+          "electricalType": "input",
+          "direction": "input"
+        },
+        {
+          "id": "vcc",
+          "number": "7",
+          "name": "VCC",
+          "group": "POWER",
+          "electricalType": "powerInput",
+          "direction": "power",
+          "voltageDomainId": "vcc"
+        },
+        {
+          "id": "vee",
+          "number": "4",
+          "name": "VEE",
+          "group": "POWER",
+          "electricalType": "powerInput",
+          "direction": "power",
+          "voltageDomainId": "vee"
+        },
+        {
+          "id": "out",
+          "number": "6",
+          "name": "OUT",
+          "group": "ANALOG",
+          "electricalType": "output",
+          "direction": "output",
+          "voltageDomainId": "vcc"
+        }
+      ],
+      "voltageDomains": [
+        {
+          "id": "vcc",
+          "name": "Positive analog supply",
+          "minVoltage": 3,
+          "maxVoltage": 18
+        },
+        {
+          "id": "vee",
+          "name": "Negative/ground supply magnitude",
+          "minVoltage": 0,
+          "maxVoltage": 18
+        }
+      ],
+      "alternateFunctions": [],
+      "differentialPairs": [],
+      "rules": [
+        {
+          "id": "power-required",
+          "kind": "powerInput",
+          "pinIds": ["vcc", "vee"],
+          "message": "Analog supplies must be connected"
+        },
+        {
+          "id": "inputs-required",
+          "kind": "required",
+          "pinIds": ["inp", "inm"],
+          "message": "Inputs must be biased"
+        }
+      ],
+      "modelIds": ["sta100-spice"],
+      "sdkAdapterIds": []
+    }
+  ],
+  "symbols": [
+    {
+      "id": "opamp",
+      "name": "Op amp",
+      "units": [
+        {
+          "id": "a",
+          "name": "Amplifier",
+          "groups": ["ANALOG", "POWER"]
+        }
+      ]
+    }
+  ],
+  "packages": [
+    {
+      "id": "dip8",
+      "name": "DIP-8 test footprint",
+      "kind": "through-hole",
+      "pads": ["1", "2", "3", "4", "5", "6", "7", "8"]
+    }
+  ],
+  "models": [
+    {
+      "id": "sta100-spice",
+      "kind": "spice",
+      "format": "spice-subcircuit",
+      "modelName": "STA100",
+      "embeddedContent": "* CC0 SugarEDA fictional test model\n.subckt STA100 INP INM VCC VEE OUT\nE1 OUT VEE INP INM 100k\nR1 OUT VEE 1meg\n.ends STA100\n",
+      "metadata": {
+        "purpose": "Binding and ngspice integration test"
+      }
+    }
+  ],
+  "sdkAdapters": [],
+  "documents": [
+    {
+      "kind": "datasheet",
+      "title": "SugarEDA STA100 Test Datasheet",
+      "sourceUrl": "https://example.invalid/sugareda/sta100",
+      "revision": "1.0",
+      "license": "CC0-1.0"
+    }
+  ]
+}
