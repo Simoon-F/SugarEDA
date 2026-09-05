@@ -1,0 +1,88 @@
+@import "tailwindcss";
+@import "tw-animate-css";
+@import "shadcn/tailwind.css";
+
+@theme inline {
+  --font-sans: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  --color-background: var(--background);
+  --color-canvas: var(--canvas);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  --color-brand: var(--brand);
+  --color-brand-hover: var(--brand-hover);
+  --color-brand-foreground: var(--brand-foreground);
+  --color-surface: var(--surface);
+  --color-surface-hover: var(--surface-hover);
+  --color-surface-raised: var(--surface-raised);
+  --color-border-subtle: var(--border-subtle);
+  --color-border-strong: var(--border-strong);
+  --color-success: var(--success);
+  --color-warning: var(--warning);
+  --radius-sm: calc(var(--radius) - 4px);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-lg: var(--radius);
+}
+
+:root {
+  --radius: 0.75rem;
+  --background: #f9fafb;
+  --canvas: #f4f6f8;
+  --primary: #20242b;
+  --brand: #2869df;
+  --brand-hover: #1f57bd;
+  --brand-foreground: #ffffff;
+  --foreground: var(--primary);
+  --primary-foreground: var(--background);
+  --secondary: rgb(32 36 43 / 74%);
+  --secondary-foreground: var(--background);
+  --surface: rgb(32 36 43 / 4%);
+  --surface-hover: rgb(32 36 43 / 7%);
+  --surface-raised: #ffffff;
+  --card: var(--surface-raised);
+  --card-foreground: var(--foreground);
+  --popover: var(--surface-raised);
+  --popover-foreground: var(--foreground);
+  --muted: var(--surface);
+  --muted-foreground: rgb(32 36 43 / 63%);
+  --accent: var(--surface-hover);
+  --accent-foreground: var(--foreground);
+  --destructive: #c83f49;
+  --success: #20865a;
+  --warning: #a8640a;
+  --border: rgb(32 36 43 / 9%);
+  --border-subtle: rgb(32 36 43 / 5.5%);
+  --border-strong: rgb(32 36 43 / 15%);
+  --input: var(--border-strong);
+  --ring: var(--brand);
+  --shadow-raised: 0 1px 2px rgb(20 28 40 / 5%), 0 0 0 1px rgb(20 28 40 / 2%);
+  --shadow-floating:
+    0 16px 48px rgb(20 28 40 / 14%), 0 2px 8px rgb(20 28 40 / 8%);
+  --shadow-button:
+    0 1px 2px rgb(20 28 40 / 10%), inset 0 1px rgb(255 255 255 / 18%);
+}
+
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+  }
+  body {
+    @apply bg-canvas text-foreground font-sans;
+    font-size: 0.875rem;
+    font-weight: 500;
+  }
+}

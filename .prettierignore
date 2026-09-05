@@ -1,0 +1,10 @@
+dist
+node_modules
+src-tauri/target
+src-tauri/gen
+src-tauri/resources/ngspice/macos-*
+src-tauri/resources/ngspice/windows-*
+src-tauri/resources/ngspice/linux-*
+package-lock.json
+src-tauri/Cargo.lock
+examples/*.sugeda

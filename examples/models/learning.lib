@@ -1,0 +1,20 @@
+* SugarEDA educational models, revision 1. CC0-1.0.
+* Generic devices only; these are NOT vendor-qualified part models.
+.model SUGAR_DIODE D(IS=2n N=1.8 RS=0.6 CJO=2p)
+.model SUGAR_NPN NPN(IS=1e-14 BF=100 VAF=80)
+.model SUGAR_PNP PNP(IS=1e-14 BF=100 VAF=80)
+.model SUGAR_NMOS NMOS(LEVEL=1 VTO=2 KP=1m LAMBDA=0.02)
+.model SUGAR_PMOS PMOS(LEVEL=1 VTO=-2 KP=1m LAMBDA=0.02)
+* Ideal finite-gain amplifier with explicit supply connections.
+* No rail limiting, bandwidth, noise, or input common-mode model.
+.subckt SUGAR_AMP INP INM VCC VEE OUT
+RIN INP INM 10Meg
+RPOWER VCC VEE 100k
+EGAIN INTERNAL 0 INP INM 100000
+ROUT INTERNAL OUT 10
+.ends SUGAR_AMP
+* A portable two-port passive subcircuit used by integration tests.
+.subckt SUGAR_FILTER IN OUT GND
+R1 IN OUT 1k
+C1 OUT GND 1u
+.ends SUGAR_FILTER
