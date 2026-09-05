@@ -1,0 +1,180 @@
+name: Build SugarEDA Desktop
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - master
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: desktop-build-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: ${{ matrix.name }}
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: Windows x64
+            os: windows-2025
+            target: x86_64-pc-windows-msvc
+            asset_name: windows-x64
+          - name: macOS Apple Silicon
+            os: macos-15
+            target: aarch64-apple-darwin
+            asset_name: macos-arm64
+            binary_architecture: arm64
+            resource_architecture: aarch64
+          - name: macOS Intel
+            os: macos-15-intel
+            target: x86_64-apple-darwin
+            asset_name: macos-x64
+            binary_architecture: x86_64
+            resource_architecture: x86_64
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v7
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@1.96.0
+        with:
+          targets: ${{ matrix.target }}
+
+      - name: Restore Rust build cache
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri -> target
+
+      - name: Install frontend dependencies
+        run: npm ci
+
+      - name: Build bundled ngspice
+        if: runner.os == 'macOS'
+        run: npm run build:ngspice
+
+      - name: Prepare bundled ngspice
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+          $version = "47"
+          $expectedHash = "59225971bd68cdd1199443649aa4615a9e6d684933f205ab49006a3942518f5a"
+          $archive = Join-Path $env:RUNNER_TEMP "ngspice-$version`_64.7z"
+          $extractDirectory = Join-Path $env:RUNNER_TEMP "ngspice-$version"
+          $payloadDirectory = Join-Path $env:RUNNER_TEMP "sugareda-ngspice-payload"
+          $url = "https://downloads.sourceforge.net/project/ngspice/ng-spice-rework/$version/ngspice-$version`_64.7z"
+
+          curl.exe --fail --location --retry 3 --output $archive $url
+          $actualHash = (Get-FileHash -Algorithm SHA256 $archive).Hash.ToLowerInvariant()
+          if ($actualHash -ne $expectedHash) {
+            throw "ngspice archive checksum mismatch: $actualHash"
+          }
+
+          7z x $archive "-o$extractDirectory" -y
+          New-Item -ItemType Directory -Force $payloadDirectory | Out-Null
+          Copy-Item "$extractDirectory/Spice64/bin/*" $payloadDirectory -Recurse
+
+          # The console binary supports SugarEDA's headless batch invocation.
+          Copy-Item "$extractDirectory/Spice64/bin/ngspice_con.exe" "$payloadDirectory/ngspice.exe" -Force
+          New-Item -ItemType Directory -Force "$payloadDirectory/licenses" | Out-Null
+          Copy-Item "$extractDirectory/Spice64/docs/AUTHORS" "$payloadDirectory/licenses/AUTHORS"
+          Copy-Item "$extractDirectory/Spice64/docs/COPYING" "$payloadDirectory/licenses/COPYING"
+
+          npm run prepare:ngspice -- $payloadDirectory
+
+      - name: Build Windows bundles
+        if: runner.os == 'Windows'
+        run: npm run tauri build -- --target ${{ matrix.target }}
+
+      - name: Build macOS bundles
+        if: runner.os == 'macOS'
+        env:
+          APPLE_SIGNING_IDENTITY: "-"
+        run: npm run tauri build -- --target ${{ matrix.target }}
+
+      - name: Verify macOS bundles
+        if: runner.os == 'macOS'
+        shell: bash
+        run: |
+          bundle_directory="src-tauri/target/${{ matrix.target }}/release/bundle"
+          application="$bundle_directory/macos/SugarEDA.app"
+          dmg_count="$(find "$bundle_directory/dmg" -maxdepth 1 -type f -name '*.dmg' | wc -l | tr -d ' ')"
+          test "$dmg_count" = "1"
+          dmg="$(find "$bundle_directory/dmg" -maxdepth 1 -type f -name '*.dmg' -print -quit)"
+          ngspice="$application/Contents/Resources/ngspice/macos-${{ matrix.resource_architecture }}/ngspice"
+
+          test -d "$application"
+          test -x "$ngspice"
+          test "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' "$application/Contents/Info.plist")" = "com.simonf.sugareda"
+          file "$application/Contents/MacOS/sugareda" | grep -q '${{ matrix.binary_architecture }}'
+          file "$ngspice" | grep -q '${{ matrix.binary_architecture }}'
+          "$ngspice" --version
+          codesign --verify --deep --strict --verbose=2 "$application"
+          hdiutil verify "$dmg"
+
+      - name: Verify Windows bundles
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+          $bundleDirectory = "src-tauri/target/${{ matrix.target }}/release/bundle"
+          $msiFiles = @(Get-ChildItem "$bundleDirectory/msi" -File -Filter "*.msi")
+          $setupFiles = @(Get-ChildItem "$bundleDirectory/nsis" -File -Filter "*.exe")
+
+          if ($msiFiles.Count -ne 1) {
+            throw "Expected one MSI installer, found $($msiFiles.Count)."
+          }
+          if ($setupFiles.Count -ne 1) {
+            throw "Expected one NSIS installer, found $($setupFiles.Count)."
+          }
+          if ($msiFiles[0].Length -lt 1MB -or $setupFiles[0].Length -lt 1MB) {
+            throw "A generated Windows installer is unexpectedly small."
+          }
+
+          & "src-tauri/resources/ngspice/windows-x86_64/ngspice.exe" --version
+          Get-FileHash $msiFiles[0].FullName -Algorithm SHA256
+          Get-FileHash $setupFiles[0].FullName -Algorithm SHA256
+
+      - name: Prepare macOS artifacts
+        if: runner.os == 'macOS'
+        shell: bash
+        run: |
+          version="$(node -p "require('./package.json').version")"
+          mkdir -p release-assets
+          dmg="$(find "src-tauri/target/${{ matrix.target }}/release/bundle/dmg" -maxdepth 1 -type f -name '*.dmg' -print -quit)"
+          cp "$dmg" "release-assets/SugarEDA-${version}-${{ matrix.asset_name }}.dmg"
+
+      - name: Prepare Windows artifacts
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+          $version = node -p "require('./package.json').version"
+          New-Item -ItemType Directory -Force release-assets | Out-Null
+          $msi = Get-ChildItem "src-tauri/target/${{ matrix.target }}/release/bundle/msi" -File -Filter "*.msi"
+          $setup = Get-ChildItem "src-tauri/target/${{ matrix.target }}/release/bundle/nsis" -File -Filter "*.exe"
+          Copy-Item $msi.FullName "release-assets/SugarEDA-$version-windows-x64.msi"
+          Copy-Item $setup.FullName "release-assets/SugarEDA-$version-windows-x64-Setup.exe"
+
+      - name: Upload desktop artifacts
+        uses: actions/upload-artifact@v7
+        with:
+          name: sugareda-${{ matrix.asset_name }}
+          path: release-assets/*
+          if-no-files-found: error
+          retention-days: 14
