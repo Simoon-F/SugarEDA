@@ -1,14 +1,19 @@
 import { describe, expect, it } from "vitest";
 import { createBlankSnapshot } from "@/blank";
 import {
+  analyzeSchematic,
+  insertWireBend,
   nearestElectricalPoint,
   moveOrthogonalSegment,
   moveWireEndpoint,
   moveWireWithComponent,
   orthogonalRoute,
   pinPosition,
+  removeWireBend,
   samePoint,
   snapPoint,
+  wireIntersectsRect,
+  wireJunctions,
 } from "@/schematic-geometry";
 
 const geometryProject = () => {
@@ -139,5 +144,77 @@ describe("schematic geometry", () => {
       { x: 300, y: 210 },
       { x: 300, y: 170 },
     ]);
+  });
+
+  it("finds both crossing and T-shaped wire junctions", () => {
+    const wires = [
+      {
+        id: "horizontal",
+        points: [
+          { x: 0, y: 40 },
+          { x: 100, y: 40 },
+        ],
+      },
+      {
+        id: "crossing",
+        points: [
+          { x: 40, y: 0 },
+          { x: 40, y: 80 },
+        ],
+      },
+      {
+        id: "tee",
+        points: [
+          { x: 80, y: 40 },
+          { x: 80, y: 80 },
+        ],
+      },
+    ];
+    expect(wireJunctions(wires)).toEqual(
+      expect.arrayContaining([
+        { x: 40, y: 40 },
+        { x: 80, y: 40 },
+      ]),
+    );
+  });
+
+  it("adds and removes an explicit wire bend", () => {
+    const source = [
+      { x: 0, y: 20 },
+      { x: 100, y: 20 },
+    ];
+    const inserted = insertWireBend(source, 0, { x: 46, y: 24 });
+    expect(inserted).toEqual({
+      points: [source[0], { x: 40, y: 20 }, source[1]],
+      index: 1,
+    });
+    expect(removeWireBend(inserted!.points, inserted!.index)).toEqual(source);
+  });
+
+  it("selects wires crossing a marquee and reports live open circuits", () => {
+    const project = geometryProject();
+    expect(
+      wireIntersectsRect(project.sheets[0].wires[0], 220, 160, 260, 180),
+    ).toBe(true);
+    let diagnostics = analyzeSchematic(project);
+    expect(diagnostics.brokenWireIds.size).toBe(1);
+    expect(diagnostics.floatingPinIds.size).toBe(2);
+
+    project.sheets[0].components.push({
+      id: crypto.randomUUID(),
+      kind: "resistor",
+      position: { x: 340, y: 170 },
+      rotation: 0,
+      parameters: { value: "1k" },
+      pins: [
+        { id: "1", name: "1", offset: { x: -40, y: 0 } },
+        { id: "2", name: "2", offset: { x: 40, y: 0 } },
+      ],
+      displayName: "R1",
+      spiceRef: "R1",
+    });
+    diagnostics = analyzeSchematic(project);
+    expect(diagnostics.brokenWireIds.size).toBe(0);
+    expect(diagnostics.floatingPinIds.size).toBe(2);
   });
 });

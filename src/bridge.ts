@@ -2,6 +2,9 @@ import { invoke } from "@tauri-apps/api/core";
 import type {
   BackendStatus,
   EditorCommand,
+  RecentProject,
+  RecoveryInfo,
+  SimulationCheckReport,
   SimulationResult,
   Snapshot,
 } from "./types";
@@ -13,11 +16,19 @@ export const api = {
   load: (path: string) => invoke<Snapshot>("load_project", { path }),
   save: (path?: string | null) =>
     invoke<Snapshot>("save_project", { path: path || null }),
+  autosave: () => invoke<RecoveryInfo | null>("autosave_project"),
+  recoveryStatus: () => invoke<RecoveryInfo | null>("recovery_status"),
+  restoreRecovery: () => invoke<Snapshot>("restore_recovery"),
+  discardRecovery: () => invoke<void>("discard_recovery"),
+  recentProjects: () => invoke<RecentProject[]>("recent_projects"),
+  forgetRecentProject: (path: string) =>
+    invoke<RecentProject[]>("forget_recent_project", { path }),
   apply: (command: EditorCommand) =>
     invoke<Snapshot>("apply_editor_command", { command }),
   undo: () => invoke<Snapshot>("undo"),
   redo: () => invoke<Snapshot>("redo"),
   netlist: () => invoke<string>("generate_netlist"),
+  check: () => invoke<SimulationCheckReport>("simulation_check"),
   importSpiceLibrary: (path: string) =>
     invoke<Snapshot>("import_spice_library", { path }),
   exportWaveform: (path: string, csv: string) =>

@@ -1,12 +1,25 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { open, save } from "@tauri-apps/plugin-dialog";
+import { getCurrentWindow } from "@tauri-apps/api/window";
 import "./app.css";
 import { api, isDesktop } from "./bridge";
 import { createBlankSnapshot } from "./blank";
 import { SchematicCanvas } from "./schematic-canvas";
 import { Waveform } from "./waveform";
 import { SimulationConfig } from "./simulation-config";
-import { moveWireWithComponent } from "./schematic-geometry";
+import { SimulationCheckPanel } from "./simulation-check-panel";
+import { RecoveryDialog, UnsavedChangesDialog } from "./reliability-dialogs";
+import {
+  availableProbeOptions,
+  localSimulationCheck,
+} from "./simulation-check";
+import {
+  GRID,
+  moveWireEndpoint,
+  moveWireWithComponent,
+  pinPosition,
+  samePoint,
+} from "./schematic-geometry";
 import { useI18n } from "./i18n";
 import { Button } from "@/components/ui/button";
 import {
@@ -25,6 +38,7 @@ import {
 } from "@/components/ui/tooltip";
 import {
   Cable,
+  Clock3,
   FileCode2,
   MousePointer2,
   PackagePlus,
@@ -41,10 +55,121 @@ import type {
   ComponentPlacement,
   EditorCommand,
   Point,
+  Project,
+  RecentProject,
+  RecoveryInfo,
   SimulationProfile,
+  SimulationCheckReport,
   SimulationResult,
   Snapshot,
+  Wire,
 } from "./types";
+
+type ClipboardPayload = { components: Component[]; wires: Wire[] };
+type PendingTransition = {
+  destination: string;
+  action: () => Promise<void>;
+};
+
+const isTextEditing = (target: EventTarget | null) =>
+  target instanceof HTMLInputElement ||
+  target instanceof HTMLTextAreaElement ||
+  target instanceof HTMLSelectElement ||
+  (target instanceof HTMLElement && target.isContentEditable);
+
+const translatedPoints = (points: Point[], delta: Point) =>
+  points.map((point) => ({
+    x: point.x + delta.x,
+    y: point.y + delta.y,
+  }));
+
+function moveLocalSelection(
+  components: Component[],
+  wires: Wire[],
+  componentIds: string[],
+  wireIds: string[],
+  delta: Point,
+) {
+  const componentIdSet = new Set(componentIds);
+  const wireIdSet = new Set(wireIds);
+  const attachedPins = components
+    .filter(
+      (component) =>
+        componentIdSet.has(component.id) && component.kind !== "netLabel",
+    )
+    .flatMap((component) =>
+      component.pins.map((pin) => pinPosition(component, pin.offset)),
+    );
+  for (const component of components)
+    if (componentIdSet.has(component.id))
+      component.position = {
+        x: component.position.x + delta.x,
+        y: component.position.y + delta.y,
+      };
+  for (const wire of wires) {
+    if (wireIdSet.has(wire.id)) {
+      wire.points = translatedPoints(wire.points, delta);
+      continue;
+    }
+    if (attachedPins.some((pin) => samePoint(pin, wire.points[0])))
+      wire.points = moveWireEndpoint(wire.points, "start", {
+        x: wire.points[0].x + delta.x,
+        y: wire.points[0].y + delta.y,
+      });
+    const end = wire.points[wire.points.length - 1];
+    if (attachedPins.some((pin) => samePoint(pin, end)))
+      wire.points = moveWireEndpoint(wire.points, "end", {
+        x: end.x + delta.x,
+        y: end.y + delta.y,
+      });
+  }
+}
+
+const nextReference = (reference: string, used: Set<string>) => {
+  if (!reference) return "";
+  const prefix = reference.match(/^[A-Za-z]+/)?.[0] ?? reference;
+  let number = 1;
+  while (used.has(`${prefix}${number}`.toLowerCase())) number += 1;
+  const next = `${prefix}${number}`;
+  used.add(next.toLowerCase());
+  return next;
+};
+
+function instantiateClipboard(
+  clipboard: ClipboardPayload,
+  sheet: Project["sheets"][number],
+  offset: Point,
+  reservedReferences?: Set<string>,
+): ClipboardPayload {
+  const usedReferences = new Set(
+    [
+      ...sheet.components.map((component) => component.spiceRef.toLowerCase()),
+      ...(reservedReferences ?? []),
+    ].filter(Boolean),
+  );
+  const result = {
+    components: clipboard.components.map((source) => {
+      const component = structuredClone(source);
+      component.id = crypto.randomUUID();
+      component.position = {
+        x: source.position.x + offset.x,
+        y: source.position.y + offset.y,
+      };
+      const reference = nextReference(source.spiceRef, usedReferences);
+      if (component.displayName === component.spiceRef)
+        component.displayName = reference;
+      component.spiceRef = reference;
+      return component;
+    }),
+    wires: clipboard.wires.map((source) => ({
+      id: crypto.randomUUID(),
+      points: translatedPoints(source.points, offset),
+    })),
+  };
+  if (reservedReferences)
+    for (const reference of usedReferences) reservedReferences.add(reference);
+  return result;
+}
 
 const library: {
   group: string;
@@ -100,13 +225,17 @@ const validationMessage = (item: object, language: "zh-CN" | "en") => {
     case "unknown_probe":
       return quoted.length > 1
         ? `探针“${quoted[0]}”引用了不存在或未连接的节点“${quoted[1]}”。请放置同名网络标签并确认标签尖端已经吸附。`
-        : `探针引用了不存在的器件“${quoted[0] || "未知"}”。`;
+        : `探针“${quoted[0] || "未知"}”引用了不可用的网络或器件。`;
     case "invalid_probe":
       return `探针表达式“${quoted[0] || ""}”无效。请使用 v(out)、v(out,in) 或 i(v1)。`;
     case "missing_ground":
       return "原理图缺少接地参考。请放置 Ground 并把其绿色引脚接入电路。";
     case "floating_pin":
-      return `存在未连接的引脚：${message}`;
+      return `引脚“${message.match(/Pin\s+([^\s]+)/)?.[1] || "未知"}”未建立电气连接。`;
+    case "invalid_label":
+      return `网络标签“${quoted[0] || ""}”名称无效。`;
+    case "conflicting_labels":
+      return `同一网络存在冲突的标签：${message}`;
     case "duplicate_reference":
       return `存在重复位号“${quoted[0] || ""}”。`;
     case "invalid_reference":
@@ -133,6 +262,9 @@ const errorText = (error: unknown, language: "zh-CN" | "en" = "en") =>
 function App() {
   const { language, setLanguage, t } = useI18n();
   const pendingEdits = useRef<Promise<void>>(Promise.resolve());
+  const clipboard = useRef<ClipboardPayload | null>(null);
+  const pasteSequence = useRef(0);
+  const reservedReferences = useRef(new Set<string>());
   const libraryPointer = useRef<{
     placement: ComponentPlacement;
     start: Point;
@@ -140,9 +272,16 @@ function App() {
   } | null>(null);
   const simulationInFlight = useRef(false);
   const simulationCancelled = useRef(false);
+  const bootstrapStarted = useRef(false);
+  const dirtyRef = useRef(false);
+  const closingRef = useRef(false);
   const [snapshot, setSnapshot] = useState<Snapshot>(() =>
     createBlankSnapshot(),
   );
+  const acceptSnapshot = useCallback((next: Snapshot) => {
+    dirtyRef.current = next.dirty;
+    setSnapshot(next);
+  }, []);
   const [selected, setSelected] = useState<string[]>([]);
   const [tool, setTool] = useState<"select" | "wire">("select");
   const [placement, setPlacement] = useState<ComponentPlacement | null>(null);
@@ -176,7 +315,25 @@ function App() {
   const [ngspicePath, setNgspicePath] = useState("");
   const [running, setRunning] = useState(false);
   const [simError, setSimError] = useState<string | null>(null);
+  const [checkReport, setCheckReport] = useState<SimulationCheckReport | null>(
+    null,
+  );
+  const [checking, setChecking] = useState(false);
+  const [focusRequest, setFocusRequest] = useState<{
+    componentId: string;
+    nonce: number;
+  } | null>(null);
   const [result, setResult] = useState<SimulationResult | null>(null);
+  const [recentProjects, setRecentProjects] = useState<RecentProject[]>([]);
+  const [recovery, setRecovery] = useState<RecoveryInfo | null>(null);
+  const [recoveryBusy, setRecoveryBusy] = useState(false);
+  const [autosaveState, setAutosaveState] = useState<
+    "idle" | "saving" | "saved" | "error"
+  >("idle");
+  const [autosavedAt, setAutosavedAt] = useState<string | null>(null);
+  const [pendingTransition, setPendingTransition] =
+    useState<PendingTransition | null>(null);
+  const [transitionSaving, setTransitionSaving] = useState(false);
   const [query, setQuery] = useState("");
   const sheet = snapshot.project.sheets[0];
   const selectedComponent = sheet.components.find((c) => c.id === selected[0]);
@@ -184,28 +341,13 @@ function App() {
     snapshot.project.simulationProfiles.find(
       (p) => p.id === snapshot.project.activeSimulationProfile,
     ) || snapshot.project.simulationProfiles[0];
+  dirtyRef.current = snapshot.dirty;
   useEffect(
     () => () => document.body.classList.remove("component-dragging"),
     [],
   );
   useEffect(() => {
-    if (isDesktop()) {
-      api
-        .snapshot()
-        .then(setSnapshot)
-        .catch((e) => setLogs((l) => [...l, errorText(e, language)]));
-      api
-        .status()
-        .then(setStatus)
-        .catch((e) =>
-          setStatus({
-            available: false,
-            executable: "ngspice",
-            version: null,
-            message: errorText(e, language),
-          }),
-        );
-    } else
+    if (!isDesktop()) {
       setStatus({
         available: false,
         executable: "ngspice",
@@ -214,10 +356,106 @@ function App() {
           "Browser preview — simulation is available in the Tauri desktop app",
         ),
       });
-  }, [language, t]);
-  const localApply = useCallback(
-    (command: EditorCommand) => {
-      const next = structuredClone(snapshot);
+      return;
+    }
+    if (bootstrapStarted.current) return;
+    bootstrapStarted.current = true;
+    void api
+      .snapshot()
+      .then(acceptSnapshot)
+      .catch((error) =>
+        setLogs((lines) => [
+          ...lines,
+          `WORKSPACE ERROR ${errorText(error, language)}`,
+        ]),
+      );
+    void api
+      .status()
+      .then(setStatus)
+      .catch((error) =>
+        setStatus({
+          available: false,
+          executable: "ngspice",
+          version: null,
+          message: errorText(error, language),
+        }),
+      );
+    void api
+      .recentProjects()
+      .then(setRecentProjects)
+      .catch((error) =>
+        setLogs((lines) => [
+          ...lines,
+          `RECENT PROJECTS ERROR ${errorText(error, language)}`,
+        ]),
+      );
+    void api
+      .recoveryStatus()
+      .then(setRecovery)
+      .catch((error) =>
+        setLogs((lines) => [
+          ...lines,
+          `RECOVERY ERROR ${errorText(error, language)}`,
+        ]),
+      );
+  }, [acceptSnapshot, language, t]);
+
+  useEffect(() => {
+    if (!isDesktop() || !snapshot.dirty || recovery) return;
+    setAutosaveState("saving");
+    const timer = window.setTimeout(() => {
+      void pendingEdits.current
+        .then(() => api.autosave())
+        .then((info) => {
+          if (!info) {
+            setAutosaveState("idle");
+            return;
+          }
+          setAutosavedAt(info.savedAt);
+          setAutosaveState("saved");
+        })
+        .catch((error) => {
+          setAutosaveState("error");
+          setLogs((lines) => [
+            ...lines,
+            `AUTOSAVE ERROR ${errorText(error, language)}`,
+          ]);
+        });
+    }, 900);
+    return () => window.clearTimeout(timer);
+  }, [language, recovery, snapshot.dirty, snapshot.project.updatedAt]);
+
+  useEffect(() => {
+    if (!isDesktop()) return;
+    let disposed = false;
+    let unlisten: (() => void) | undefined;
+    void getCurrentWindow()
+      .onCloseRequested((event) => {
+        if (closingRef.current) return;
+        if (!dirtyRef.current) return;
+        event.preventDefault();
+        setPendingTransition({
+          destination: t("Close SugarEDA"),
+          action: async () => {
+            closingRef.current = true;
+            await api.discardRecovery();
+            await getCurrentWindow().destroy();
+          },
+        });
+      })
+      .then((stopListening) => {
+        if (disposed) stopListening();
+        else unlisten = stopListening;
+      });
+    return () => {
+      disposed = true;
+      unlisten?.();
+    };
+  }, [t]);
+  const localApply = useCallback((command: EditorCommand) => {
+    dirtyRef.current = true;
+    setSnapshot((current) => {
+      const next = structuredClone(current);
       if (command.action === "moveComponent") {
         const c = next.project.sheets[0].components.find(
           (c) => c.id === command.id,
@@ -231,6 +469,14 @@ function App() {
           );
           c.position = command.position;
         }
+      } else if (command.action === "moveSelection") {
+        moveLocalSelection(
+          next.project.sheets[0].components,
+          next.project.sheets[0].wires,
+          command.componentIds,
+          command.wireIds,
+          command.delta,
+        );
       } else if (command.action === "updateComponent") {
         const c = next.project.sheets[0].components.find(
           (c) => c.id === command.id,
@@ -253,6 +499,9 @@ function App() {
         next.project.sheets[0].wires = next.project.sheets[0].wires.filter(
           (w) => !command.wireIds.includes(w.id),
         );
+      } else if (command.action === "insertSelection") {
+        next.project.sheets[0].components.push(...command.components);
+        next.project.sheets[0].wires.push(...command.wires);
       } else if (command.action === "addWire")
         next.project.sheets[0].wires.push({
           id: crypto.randomUUID(),
@@ -274,12 +523,32 @@ function App() {
         const i = next.project.simulationProfiles.findIndex(
           (p) => p.id === command.profile.id,
         );
-        next.project.simulationProfiles[i] = command.profile;
+        if (i >= 0) next.project.simulationProfiles[i] = command.profile;
+        else next.project.simulationProfiles.push(command.profile);
+      } else if (command.action === "addSimulationProfile") {
+        next.project.simulationProfiles.push(command.profile);
+        next.project.activeSimulationProfile = command.profile.id;
+      } else if (command.action === "deleteSimulationProfile") {
+        if (next.project.simulationProfiles.length <= 1) return current;
+        next.project.simulationProfiles =
+          next.project.simulationProfiles.filter(
+            (profile) => profile.id !== command.id,
+          );
+        if (next.project.activeSimulationProfile === command.id)
+          next.project.activeSimulationProfile =
+            next.project.simulationProfiles[0]?.id ?? null;
+      } else if (command.action === "selectSimulationProfile") {
+        if (
+          next.project.simulationProfiles.some(
+            (profile) => profile.id === command.id,
+          )
+        )
+          next.project.activeSimulationProfile = command.id;
       } else if (command.action === "addModelComponent") {
         const definition = next.project.spiceLibraries
           .find((source) => source.id === command.libraryId)
           ?.models.find((model) => model.name === command.modelName);
-        if (!definition) return;
+        if (!definition) return current;
         const prefix =
           definition.kind === "diode"
             ? "D"
@@ -334,7 +603,7 @@ function App() {
           netLabel: ["", "net"],
         };
         const defaultsForKind = defaults[command.kind];
-        if (!defaultsForKind) return;
+        if (!defaultsForKind) return current;
         const [prefix, value] = defaultsForKind,
           vertical =
             command.kind === "voltageSource" ||
@@ -374,15 +643,15 @@ function App() {
         });
       }
       next.dirty = true;
-      setSnapshot(next);
-    },
-    [snapshot],
-  );
+      return next;
+    });
+  }, []);
   const command = useCallback(
     async (c: EditorCommand) => {
+      if (c.action !== "updateView") setCheckReport(null);
       const task = pendingEdits.current.then(async () => {
         try {
-          if (isDesktop()) setSnapshot(await api.apply(c));
+          if (isDesktop()) acceptSnapshot(await api.apply(c));
           else localApply(c);
         } catch (e) {
           setLogs((l) => [...l, `ERROR ${errorText(e, language)}`]);
@@ -391,14 +660,20 @@ function App() {
       pendingEdits.current = task;
       await task;
     },
-    [language, localApply],
+    [acceptSnapshot, language, localApply],
   );
+  const handleCanvasCommand = useCallback(
+    (nextCommand: EditorCommand) => void command(nextCommand),
+    [command],
+  );
+  const completePlacement = useCallback(() => setPlacement(null), []);
+  const completeExternalDrop = useCallback(() => setExternalDrop(null), []);
   const doUndo = useCallback(async () => {
-    if (isDesktop()) setSnapshot(await api.undo());
-  }, []);
+    if (isDesktop()) acceptSnapshot(await api.undo());
+  }, [acceptSnapshot]);
   const doRedo = useCallback(async () => {
-    if (isDesktop()) setSnapshot(await api.redo());
-  }, []);
+    if (isDesktop()) acceptSnapshot(await api.redo());
+  }, [acceptSnapshot]);
   const remove = useCallback(() => {
     if (selected.length) {
       const componentIds = selected.filter((id) =>
@@ -415,39 +690,155 @@ function App() {
       setSelected([]);
     }
   }, [selected, command, sheet.components, sheet.wires]);
-  const newProject = async () => {
-    if (
-      snapshot.dirty &&
-      !confirm(
-        language === "zh-CN"
-          ? "放弃未保存的更改并新建项目？"
-          : "Discard unsaved changes and create a new project?",
-      )
-    )
-      return;
-    if (isDesktop()) setSnapshot(await api.newProject());
-    else setSnapshot(createBlankSnapshot());
+  const copySelection = useCallback(() => {
+    const ids = new Set(selected);
+    const payload = {
+      components: sheet.components
+        .filter((component) => ids.has(component.id))
+        .map((component) => structuredClone(component)),
+      wires: sheet.wires
+        .filter((wire) => ids.has(wire.id))
+        .map((wire) => structuredClone(wire)),
+    };
+    if (!payload.components.length && !payload.wires.length) return false;
+    clipboard.current = payload;
+    pasteSequence.current = 0;
+    return true;
+  }, [selected, sheet.components, sheet.wires]);
+  const pasteSelection = useCallback(
+    async (source = clipboard.current, steps?: number) => {
+      if (!source) return;
+      const sequence = steps ?? pasteSequence.current + 1;
+      const inserted = instantiateClipboard(
+        source,
+        sheet,
+        {
+          x: GRID * sequence,
+          y: GRID * sequence,
+        },
+        reservedReferences.current,
+      );
+      pasteSequence.current = sequence;
+      await command({
+        action: "insertSelection",
+        components: inserted.components,
+        wires: inserted.wires,
+      });
+      setSelected([
+        ...inserted.components.map((component) => component.id),
+        ...inserted.wires.map((wire) => wire.id),
+      ]);
+      setTool("select");
+    },
+    [command, sheet],
+  );
+  const duplicateSelection = useCallback(async () => {
+    if (!copySelection()) return;
+    await pasteSelection(clipboard.current, 1);
+  }, [copySelection, pasteSelection]);
+  const nudgeSelection = useCallback(
+    (delta: Point) => {
+      if (!selected.length) return;
+      const componentIds = selected.filter((id) =>
+        sheet.components.some((component) => component.id === id),
+      );
+      const wireIds = selected.filter((id) =>
+        sheet.wires.some((wire) => wire.id === id),
+      );
+      void command({
+        action: "moveSelection",
+        componentIds,
+        wireIds,
+        delta,
+      });
+    },
+    [command, selected, sheet.components, sheet.wires],
+  );
+  const resetWorkspaceUi = () => {
     setSelected([]);
     setResult(null);
+    setCheckReport(null);
+    setAutosaveState("idle");
+    setAutosavedAt(null);
+  };
+  const refreshRecentProjects = async () => {
+    try {
+      setRecentProjects(await api.recentProjects());
+    } catch (error) {
+      setLogs((lines) => [
+        ...lines,
+        `RECENT PROJECTS ERROR ${errorText(error, language)}`,
+      ]);
+    }
+  };
+  const continueOrPrompt = async (
+    destination: string,
+    action: () => Promise<void>,
+  ) => {
+    await pendingEdits.current;
+    if (dirtyRef.current) {
+      setPendingTransition({ destination, action });
+      return;
+    }
+    await action();
+  };
+  const newProject = async () => {
+    await continueOrPrompt(t("Create a new project"), async () => {
+      if (isDesktop()) acceptSnapshot(await api.newProject());
+      else acceptSnapshot(createBlankSnapshot());
+      resetWorkspaceUi();
+    });
   };
   const openProject = async () => {
     if (!isDesktop()) return;
-    const path = await open({
-      multiple: false,
-      filters: [{ name: "SugarEDA project", extensions: ["sugeda"] }],
+    await continueOrPrompt(t("Open another project"), async () => {
+      const path = await open({
+        multiple: false,
+        filters: [{ name: "SugarEDA project", extensions: ["sugeda"] }],
+      });
+      if (typeof path === "string") await loadProject(path);
     });
-    if (path) {
-      try {
-        setSnapshot(await api.load(path));
-        setLogs((l) => [...l, `Opened ${path}`]);
-      } catch (e) {
-        setLogs((l) => [...l, `OPEN ERROR ${errorText(e, language)}`]);
-        setBottomTab("Console");
-      }
+  };
+  const loadProject = async (path: string) => {
+    try {
+      acceptSnapshot(await api.load(path));
+      resetWorkspaceUi();
+      await refreshRecentProjects();
+      setLogs((lines) => [...lines, `Opened ${path}`]);
+    } catch (error) {
+      setLogs((lines) => [
+        ...lines,
+        `OPEN ERROR ${errorText(error, language)}`,
+      ]);
+      setBottomOpen(true);
+      setBottomTab("Console");
     }
   };
-  const saveProject = async (as = false) => {
-    if (!isDesktop()) return;
+  const openRecentProject = async (entry: RecentProject) => {
+    if (!entry.exists) {
+      try {
+        setRecentProjects(await api.forgetRecentProject(entry.path));
+        setLogs((lines) => [
+          ...lines,
+          `${t("Removed missing recent project")}: ${entry.path}`,
+        ]);
+      } catch (error) {
+        setLogs((lines) => [
+          ...lines,
+          `RECENT PROJECTS ERROR ${errorText(error, language)}`,
+        ]);
+      }
+      return;
+    }
+    await continueOrPrompt(t("Open another project"), () =>
+      loadProject(entry.path),
+    );
+  };
+  const saveProject = async (as = false): Promise<boolean> => {
+    if (!isDesktop()) return false;
+    if (document.activeElement instanceof HTMLElement)
+      document.activeElement.blur();
+    await pendingEdits.current;
     let path: string | null =
       as || !snapshot.path
         ? await save({
@@ -458,11 +849,87 @@ function App() {
     if (path && !path.toLowerCase().endsWith(".sugeda")) path += `.sugeda`;
     if (path)
       try {
-        setSnapshot(await api.save(path));
+        acceptSnapshot(await api.save(path));
+        await refreshRecentProjects();
+        setAutosaveState("idle");
+        setAutosavedAt(null);
         setLogs((l) => [...l, `Saved ${path}`]);
+        return true;
       } catch (e) {
         setLogs((l) => [...l, `SAVE ERROR ${errorText(e, language)}`]);
+        setBottomOpen(true);
+        setBottomTab("Console");
       }
+    return false;
+  };
+  const saveAndContinue = async () => {
+    if (!pendingTransition) return;
+    setTransitionSaving(true);
+    const transition = pendingTransition;
+    if (await saveProject()) {
+      try {
+        await transition.action();
+        setPendingTransition(null);
+      } catch (error) {
+        setPendingTransition(null);
+        setLogs((lines) => [
+          ...lines,
+          `TRANSITION ERROR ${errorText(error, language)}`,
+        ]);
+        setBottomOpen(true);
+        setBottomTab("Console");
+      }
+    }
+    setTransitionSaving(false);
+  };
+  const discardAndContinue = async () => {
+    if (!pendingTransition) return;
+    const transition = pendingTransition;
+    setTransitionSaving(true);
+    try {
+      await transition.action();
+      setPendingTransition(null);
+    } catch (error) {
+      setLogs((lines) => [
+        ...lines,
+        `TRANSITION ERROR ${errorText(error, language)}`,
+      ]);
+      setBottomOpen(true);
+      setBottomTab("Console");
+    } finally {
+      setTransitionSaving(false);
+    }
+  };
+  const restoreAutosave = async () => {
+    setRecoveryBusy(true);
+    try {
+      acceptSnapshot(await api.restoreRecovery());
+      setRecovery(null);
+      resetWorkspaceUi();
+      setAutosaveState("saved");
+      setLogs((lines) => [...lines, t("Recovered autosaved project")]);
+    } catch (error) {
+      setLogs((lines) => [
+        ...lines,
+        `RECOVERY ERROR ${errorText(error, language)}`,
+      ]);
+    } finally {
+      setRecoveryBusy(false);
+    }
+  };
+  const discardAutosave = async () => {
+    setRecoveryBusy(true);
+    try {
+      await api.discardRecovery();
+      setRecovery(null);
+    } catch (error) {
+      setLogs((lines) => [
+        ...lines,
+        `RECOVERY ERROR ${errorText(error, language)}`,
+      ]);
+    } finally {
+      setRecoveryBusy(false);
+    }
   };
   const importSpiceLibrary = async () => {
     if (!isDesktop()) {
@@ -484,7 +951,7 @@ function App() {
     if (typeof path !== "string") return;
     try {
       const next = await api.importSpiceLibrary(path);
-      setSnapshot(next);
+      acceptSnapshot(next);
       const imported =
         next.project.spiceLibraries[next.project.spiceLibraries.length - 1];
       setLogs((lines) => [
@@ -508,11 +975,34 @@ function App() {
         ? await api.netlist()
         : "* Browser preview\nV1 in 0 PULSE(0 5 0 1u 1u 5m 10m)\nR1 in out 1k\nC1 out 0 1u\n.tran 10u 30m\n.end";
       setNetlist(text);
-      setLogs((l) => [...l, t("Netlist generated without errors")]);
+      setLogs((l) => [...l, t("Netlist generation succeeded")]);
     } catch (e) {
       setNetlist("");
       setLogs((l) => [...l, `NETLIST ERROR ${errorText(e, language)}`]);
       setBottomTab("Console");
+    }
+  };
+  const checkSimulation = async () => {
+    if (!profile) return null;
+    setBottomOpen(true);
+    setBottomTab("Check");
+    setChecking(true);
+    try {
+      await pendingEdits.current;
+      const report = isDesktop()
+        ? await api.check()
+        : localSimulationCheck(snapshot.project, profile);
+      setCheckReport(report);
+      if (report.netlist) setNetlist(report.netlist);
+      return report;
+    } catch (error) {
+      setLogs((lines) => [
+        ...lines,
+        `CHECK ERROR ${errorText(error, language)}`,
+      ]);
+      return null;
+    } finally {
+      setChecking(false);
     }
   };
   const run = async () => {
@@ -523,16 +1013,26 @@ function App() {
     if (document.activeElement instanceof HTMLInputElement)
       document.activeElement.blur();
     setBottomOpen(true);
-    setBottomTab("Waveform");
-    setRunning(true);
+    setBottomTab("Check");
+    setRunning(false);
     setSimError(null);
     setResult(null);
     try {
       await pendingEdits.current;
-      await inspectNetlist();
+      const report = await checkSimulation();
+      if (!report?.ready) {
+        const message = report
+          ? `${report.issues.length} ${t("simulation check issues must be resolved")}`
+          : t("Simulation check failed");
+        setSimError(message);
+        setLogs((lines) => [...lines, `CHECK ${message}`]);
+        return;
+      }
+      setLogs((lines) => [...lines, t("Netlist generation succeeded")]);
       if (simulationCancelled.current)
         throw new Error(t("Simulation cancelled by user"));
       setBottomTab("Waveform");
+      setRunning(true);
       if (!isDesktop())
         throw new Error(
           t("Open this project in the Tauri desktop app to run ngspice"),
@@ -543,7 +1043,7 @@ function App() {
       setResult(data);
       setLogs((l) => [
         ...l,
-        `${t("Simulation succeeded")} · ${data.executionTimeMs} ms`,
+        `${t("Simulation computation succeeded")} · ${data.executionTimeMs} ms`,
         data.log,
       ]);
     } catch (e) {
@@ -579,29 +1079,59 @@ function App() {
   useEffect(() => {
     const key = (e: KeyboardEvent) => {
       const mod = e.metaKey || e.ctrlKey;
-      if (mod && e.key.toLowerCase() === "s") {
+      const editing = isTextEditing(e.target);
+      const keyName = e.key.toLowerCase();
+      if (
+        editing &&
+        ((mod && ["c", "v", "d"].includes(keyName)) ||
+          e.key.startsWith("Arrow") ||
+          e.key === "Delete" ||
+          e.key === "Backspace")
+      )
+        return;
+      if (mod && keyName === "c") {
+        if (copySelection()) e.preventDefault();
+      } else if (mod && keyName === "v") {
+        if (clipboard.current) {
+          e.preventDefault();
+          void pasteSelection();
+        }
+      } else if (mod && keyName === "d") {
+        if (selected.length) {
+          e.preventDefault();
+          void duplicateSelection();
+        }
+      } else if (mod && keyName === "s") {
         e.preventDefault();
         void saveProject(e.shiftKey);
-      } else if (mod && e.key.toLowerCase() === "o") {
+      } else if (mod && keyName === "o") {
         e.preventDefault();
         void openProject();
-      } else if (mod && e.key.toLowerCase() === "n") {
+      } else if (mod && keyName === "n") {
         e.preventDefault();
         void newProject();
-      } else if (mod && e.key.toLowerCase() === "z") {
+      } else if (mod && keyName === "z") {
         e.preventDefault();
         void (e.shiftKey ? doRedo() : doUndo());
+      } else if (e.key === "F4" && e.shiftKey) {
+        e.preventDefault();
+        void checkSimulation();
       } else if (e.key === "F5") {
         e.preventDefault();
         void (e.shiftKey ? stop() : run());
-      } else if (
-        (e.key === "Delete" || e.key === "Backspace") &&
-        !(
-          e.target instanceof HTMLInputElement ||
-          e.target instanceof HTMLTextAreaElement
-        )
-      )
-        remove();
+      } else if (e.key === "ArrowLeft") {
+        e.preventDefault();
+        nudgeSelection({ x: e.shiftKey ? -GRID : -1, y: 0 });
+      } else if (e.key === "ArrowRight") {
+        e.preventDefault();
+        nudgeSelection({ x: e.shiftKey ? GRID : 1, y: 0 });
+      } else if (e.key === "ArrowUp") {
+        e.preventDefault();
+        nudgeSelection({ x: 0, y: e.shiftKey ? -GRID : -1 });
+      } else if (e.key === "ArrowDown") {
+        e.preventDefault();
+        nudgeSelection({ x: 0, y: e.shiftKey ? GRID : 1 });
+      } else if (e.key === "Delete" || e.key === "Backspace") remove();
       else if (e.key === "Escape") {
         setPlacement(null);
         setTool("select");
@@ -649,14 +1179,40 @@ function App() {
       }))
       .filter((g) => g.items.length);
   }, [query, snapshot.project.spiceLibraries]);
+  const probeOptions = useMemo(
+    () => availableProbeOptions(snapshot.project),
+    [snapshot.project],
+  );
   const updateProfile = (change: Partial<SimulationProfile>) =>
     profile &&
     void command({
       action: "updateSimulation",
       profile: { ...profile, ...change },
     });
+  const addProfile = () => {
+    if (!profile) return;
+    void command({
+      action: "addSimulationProfile",
+      profile: {
+        ...structuredClone(profile),
+        id: crypto.randomUUID(),
+        name: `${t("Simulation")} ${snapshot.project.simulationProfiles.length + 1}`,
+      },
+    });
+  };
+  const deleteProfile = () =>
+    profile &&
+    void command({ action: "deleteSimulationProfile", id: profile.id });
+  const selectProfile = (id: string) =>
+    void command({ action: "selectSimulationProfile", id });
+  const locateCheckIssue = (componentId: string) => {
+    setTool("select");
+    setPlacement(null);
+    setSelected([componentId]);
+    setFocusRequest({ componentId, nonce: Date.now() });
+  };
   return (
-    <div className="app-shell">
+    <div className="app-shell" data-testid="app-shell">
       <header className="titlebar">
         <div className="brand">
           <div className="brand-mark">
@@ -669,20 +1225,22 @@ function App() {
           <em>ALPHA</em>
         </div>
         <nav className="menus">
-          <Menu
-            label={t("File")}
-            items={[
-              [t("New"), "⌘N", newProject],
-              [t("Open…"), "⌘O", openProject],
-              [t("Save"), "⌘S", () => saveProject()],
-              [t("Save As…"), "⇧⌘S", () => saveProject(true)],
-            ]}
+          <FileMenu
+            recentProjects={recentProjects}
+            onNew={newProject}
+            onOpen={openProject}
+            onSave={() => saveProject()}
+            onSaveAs={() => saveProject(true)}
+            onOpenRecent={openRecentProject}
           />
           <Menu
             label={t("Edit")}
             items={[
               [t("Undo"), "⌘Z", doUndo],
               [t("Redo"), "⇧⌘Z", doRedo],
+              [t("Copy"), "⌘C", copySelection],
+              [t("Paste"), "⌘V", () => pasteSelection()],
+              [t("Duplicate"), "⌘D", duplicateSelection],
               [t("Delete"), "⌫", remove],
             ]}
           />
@@ -724,6 +1282,7 @@ function App() {
           <Menu
             label={t("Simulation")}
             items={[
+              [t("Simulation check"), "⇧F4", checkSimulation],
               [
                 t("Configure"),
                 "",
@@ -745,8 +1304,8 @@ function App() {
                 () =>
                   alert(
                     language === "zh-CN"
-                      ? "SugarEDA 0.1.0\n专注于原理图和电路仿真的开源工作台。"
-                      : "SugarEDA 0.1.0\nA focused open-source circuit workbench.",
+                      ? "SugarEDA 0.2.0 Alpha\n专注于原理图和电路仿真的开源工作台。"
+                      : "SugarEDA 0.2.0 Alpha\nA focused open-source circuit workbench.",
                   ),
               ],
             ]}
@@ -767,12 +1326,25 @@ function App() {
             ]}
           />
         </nav>
-        <div className="project-title">
+        <div className="project-title" data-testid="project-state">
           <span className={snapshot.dirty ? "dirty-dot active" : "dirty-dot"} />
           <strong>{t(snapshot.project.metadata.name)}</strong>
           <small>
             {snapshot.dirty
-              ? t("Modified")
+              ? autosaveState === "saved"
+                ? `${t("Recovery saved")} · ${
+                    autosavedAt
+                      ? new Date(autosavedAt).toLocaleTimeString(language, {
+                          hour: "2-digit",
+                          minute: "2-digit",
+                        })
+                      : t("just now")
+                  }`
+                : autosaveState === "saving"
+                  ? t("Autosaving…")
+                  : autosaveState === "error"
+                    ? t("Autosave failed")
+                    : t("Modified")
               : snapshot.path
                 ? t("Saved")
                 : t("Unsaved")}
@@ -828,6 +1400,7 @@ function App() {
                 {group.items.map((item) => (
                   <div
                     className={`library-item ${placement?.kind === item.kind && placement?.model?.modelName === item.model?.modelName ? "placing" : ""}`}
+                    data-testid={`library-${item.kind}`}
                     role="button"
                     tabIndex={0}
                     title={
@@ -1016,13 +1589,14 @@ function App() {
             selectedIds={selected}
             tool={tool}
             onSelect={setSelected}
-            onCommand={(c) => void command(c)}
+            onCommand={handleCanvasCommand}
             onCursor={setCursor}
             onView={updateView}
             placement={placement}
-            onPlacementComplete={() => setPlacement(null)}
+            onPlacementComplete={completePlacement}
             externalDrop={externalDrop}
-            onExternalDropComplete={() => setExternalDrop(null)}
+            onExternalDropComplete={completeExternalDrop}
+            focusRequest={focusRequest}
           />
         </section>
         <aside className="inspector panel">
@@ -1083,17 +1657,22 @@ function App() {
             className="bottom-tabs"
           >
             <TabsList className="tabs-list">
-              {["Configure", "Netlist", "Console", "Waveform"].map((tab) => (
-                <TabsTrigger
-                  key={tab}
-                  className={bottomTab === tab ? "active" : ""}
-                  value={tab}
-                >
-                  {t(tab)}
-                  {tab === "Console" &&
-                    logs.some((l) => l.includes("ERROR")) && <i />}
-                </TabsTrigger>
-              ))}
+              {["Check", "Configure", "Netlist", "Console", "Waveform"].map(
+                (tab) => (
+                  <TabsTrigger
+                    key={tab}
+                    className={bottomTab === tab ? "active" : ""}
+                    value={tab}
+                  >
+                    {t(tab)}
+                    {tab === "Console" &&
+                      logs.some((l) => l.includes("ERROR")) && <i />}
+                    {tab === "Check" && checkReport && !checkReport.ready && (
+                      <i />
+                    )}
+                  </TabsTrigger>
+                ),
+              )}
             </TabsList>
             <div className="sim-health">
               <span className={status.available ? "led ok" : "led"} />
@@ -1112,6 +1691,15 @@ function App() {
             </Button>
           </Tabs>
           <div className="bottom-content">
+            {bottomTab === "Check" && (
+              <SimulationCheckPanel
+                report={checkReport}
+                checking={checking}
+                onCheck={() => void checkSimulation()}
+                onLocate={locateCheckIssue}
+                formatIssue={(issue) => validationMessage(issue, language)}
+              />
+            )}{" "}
             {bottomTab === "Waveform" && (
               <Waveform result={result} running={running} error={simError} />
             )}{" "}
@@ -1144,6 +1732,8 @@ function App() {
             {bottomTab === "Configure" && profile && (
               <SimulationConfig
                 profile={profile}
+                profiles={snapshot.project.simulationProfiles}
+                probeOptions={probeOptions}
                 path={ngspicePath}
                 status={status}
                 onPath={setNgspicePath}
@@ -1153,6 +1743,9 @@ function App() {
                   )
                 }
                 onUpdate={updateProfile}
+                onSelectProfile={selectProfile}
+                onAddProfile={addProfile}
+                onDeleteProfile={deleteProfile}
               />
             )}
           </div>
@@ -1169,6 +1762,18 @@ function App() {
               ? "UNSAVED CHANGES"
               : "DOCUMENT READY"}
         </span>
+        {snapshot.dirty && (
+          <span className={`autosave-status ${autosaveState}`}>
+            <Clock3 aria-hidden="true" />
+            {autosaveState === "saving"
+              ? t("Autosaving…")
+              : autosaveState === "saved"
+                ? t("Recovery protected")
+                : autosaveState === "error"
+                  ? t("Autosave failed")
+                  : t("Waiting to autosave")}
+          </span>
+        )}
         <span className="spacer" />
         <span>
           X {Math.round(cursor.x)} &nbsp; Y {Math.round(cursor.y)}
@@ -1203,7 +1808,103 @@ function App() {
           {dragPreview.label}
         </div>
       )}
+      <UnsavedChangesDialog
+        open={Boolean(pendingTransition)}
+        destination={pendingTransition?.destination || ""}
+        saving={transitionSaving}
+        onSave={() => void saveAndContinue()}
+        onDiscard={() => void discardAndContinue()}
+        onCancel={() => setPendingTransition(null)}
+      />
+      <RecoveryDialog
+        recovery={recovery}
+        busy={recoveryBusy}
+        onRestore={() => void restoreAutosave()}
+        onDiscard={() => void discardAutosave()}
+      />
     </div>
+  );
+}
+
+function FileMenu({
+  recentProjects,
+  onNew,
+  onOpen,
+  onSave,
+  onSaveAs,
+  onOpenRecent,
+}: {
+  recentProjects: RecentProject[];
+  onNew: () => void | Promise<void>;
+  onOpen: () => void | Promise<void>;
+  onSave: () => void | Promise<boolean>;
+  onSaveAs: () => void | Promise<boolean>;
+  onOpenRecent: (project: RecentProject) => void | Promise<void>;
+}) {
+  const { t } = useI18n();
+  const navigationItems: [string, string, () => void | Promise<void>][] = [
+    [t("New"), "⌘N", onNew],
+    [t("Open…"), "⌘O", onOpen],
+  ];
+  const savingItems: [string, string, () => void | Promise<boolean>][] = [
+    [t("Save"), "⌘S", onSave],
+    [t("Save As…"), "⇧⌘S", onSaveAs],
+  ];
+  return (
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild>
+        <Button
+          variant="ghost"
+          size="sm"
+          className="menu-trigger"
+          data-testid="file-menu"
+        >
+          {t("File")}
+        </Button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="start" className="menu-popover file-menu">
+        {navigationItems.map(([name, key, action]) => (
+          <DropdownMenuItem
+            key={name}
+            onSelect={() => void action()}
+            data-testid={key === "⌘N" ? "file-new" : "file-open"}
+          >
+            <span>{name}</span>
+            <kbd>{key}</kbd>
+          </DropdownMenuItem>
+        ))}
+        <DropdownMenuSeparator />
+        {savingItems.map(([name, key, action]) => (
+          <DropdownMenuItem key={name} onSelect={() => void action()}>
+            <span>{name}</span>
+            <kbd>{key}</kbd>
+          </DropdownMenuItem>
+        ))}
+        <DropdownMenuSeparator />
+        <div className="recent-menu-heading">
+          <Clock3 aria-hidden="true" /> {t("RECENT PROJECTS")}
+        </div>
+        {recentProjects.length ? (
+          recentProjects.slice(0, 6).map((project) => (
+            <DropdownMenuItem
+              key={project.path}
+              className={`recent-menu-item ${project.exists ? "" : "missing"}`}
+              onSelect={() => void onOpenRecent(project)}
+              title={project.path}
+              data-testid="recent-project"
+            >
+              <span>
+                <strong>{project.name}</strong>
+                <small>{project.path.split(/[\\/]/).pop()}</small>
+              </span>
+              <kbd>{project.exists ? "↗" : t("Remove")}</kbd>
+            </DropdownMenuItem>
+          ))
+        ) : (
+          <div className="recent-menu-empty">{t("No recent projects")}</div>
+        )}
+      </DropdownMenuContent>
+    </DropdownMenu>
   );
 }
 

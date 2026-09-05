@@ -15,12 +15,56 @@ pub struct NetlistError {
     pub component_id: Option<Uuid>,
 }
 
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SimulationCheckIssue {
+    pub code: &'static str,
+    pub category: &'static str,
+    pub message: String,
+    pub component_id: Option<Uuid>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SimulationCheckItem {
+    pub category: &'static str,
+    pub passed: bool,
+    pub issue_count: usize,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SimulationCheckReport {
+    pub ready: bool,
+    pub checks: Vec<SimulationCheckItem>,
+    pub issues: Vec<SimulationCheckIssue>,
+    pub netlist: Option<String>,
+}
+
 type Key = (i64, i64);
 fn key(point: Point) -> Key {
     (
         (point.x * 1000.0).round() as i64,
         (point.y * 1000.0).round() as i64,
     )
+}
+
+fn segment_intersection(first: (Key, Key), second: (Key, Key)) -> Option<Key> {
+    let (a, b) = first;
+    let (c, d) = second;
+    let first_horizontal = a.1 == b.1;
+    let second_horizontal = c.1 == d.1;
+    if first_horizontal == second_horizontal {
+        return None;
+    }
+    let (horizontal, vertical) = if first_horizontal {
+        ((a, b), (c, d))
+    } else {
+        ((c, d), (a, b))
+    };
+    let point = (vertical.0 .0, horizontal.0 .1);
+    (on_segment(point, horizontal.0, horizontal.1) && on_segment(point, vertical.0, vertical.1))
+        .then_some(point)
 }
 
 fn absolute_pin(component: &Component, pin: Point) -> Point {
@@ -84,6 +128,52 @@ fn invalid_value(value: &str) -> bool {
                 || c == ';'
                 || !(c.is_ascii_alphanumeric() || " .,+-*/()_".contains(c))
         })
+}
+
+fn check_category(code: &str) -> &'static str {
+    match code {
+        "missing_ground" => "ground",
+        "floating_label" | "invalid_label" | "conflicting_labels" => "labels",
+        "unknown_probe" | "invalid_probe" => "probes",
+        "invalid_analysis" => "analysis",
+        _ => "pins",
+    }
+}
+
+pub fn check(project: &Project) -> SimulationCheckReport {
+    let (netlist, errors) = match generate(project) {
+        Ok(netlist) => (Some(netlist), vec![]),
+        Err(errors) => (None, errors),
+    };
+    let issues: Vec<_> = errors
+        .into_iter()
+        .map(|error| SimulationCheckIssue {
+            code: error.code,
+            category: check_category(error.code),
+            message: error.message,
+            component_id: error.component_id,
+        })
+        .collect();
+    let checks = ["ground", "pins", "labels", "probes", "analysis"]
+        .into_iter()
+        .map(|category| {
+            let issue_count = issues
+                .iter()
+                .filter(|issue| issue.category == category)
+                .count();
+            SimulationCheckItem {
+                category,
+                passed: issue_count == 0,
+                issue_count,
+            }
+        })
+        .collect();
+    SimulationCheckReport {
+        ready: issues.is_empty(),
+        checks,
+        issues,
+        netlist,
+    }
 }
 
 fn validate_probes(
@@ -208,11 +298,55 @@ pub fn generate(project: &Project) -> Result<String, Vec<NetlistError>> {
             uf.add(p);
             all_points.insert(p);
         }
+    }
+    let segments: Vec<_> = sheet
+        .wires
+        .iter()
+        .flat_map(|wire| {
+            wire.points
+                .windows(2)
+                .map(|segment| (key(segment[0]), key(segment[1])))
+        })
+        .collect();
+    let horizontal: Vec<_> = segments
+        .iter()
+        .copied()
+        .filter(|(a, b)| a.1 == b.1)
+        .collect();
+    let mut vertical: Vec<_> = segments
+        .iter()
+        .copied()
+        .filter(|(a, b)| a.0 == b.0 && a.1 != b.1)
+        .collect();
+    vertical.sort_by_key(|(a, _)| a.0);
+    for segment in horizontal {
+        let left = segment.0 .0.min(segment.1 .0);
+        let right = segment.0 .0.max(segment.1 .0);
+        let start = vertical.partition_point(|(a, _)| a.0 < left);
+        for candidate in vertical[start..].iter().take_while(|(a, _)| a.0 <= right) {
+            if let Some(point) = segment_intersection(segment, *candidate) {
+                uf.add(point);
+                all_points.insert(point);
+            }
+        }
+    }
+    let mut points_by_x: HashMap<i64, Vec<Key>> = HashMap::new();
+    let mut points_by_y: HashMap<i64, Vec<Key>> = HashMap::new();
+    for &point in &all_points {
+        points_by_x.entry(point.0).or_default().push(point);
+        points_by_y.entry(point.1).or_default().push(point);
+    }
+    for wire in &sheet.wires {
         for segment in wire.points.windows(2) {
             let a = key(segment[0]);
             let b = key(segment[1]);
             uf.union(a, b);
-            for &p in &all_points.clone() {
+            let aligned_points = if a.1 == b.1 {
+                points_by_y.get(&a.1)
+            } else {
+                points_by_x.get(&a.0)
+            };
+            for &p in aligned_points.into_iter().flatten() {
                 if on_segment(p, a, b) {
                     uf.union(a, p);
                 }
@@ -288,10 +422,8 @@ pub fn generate(project: &Project) -> Result<String, Vec<NetlistError>> {
     }
 
     let mut pin_counts: BTreeMap<Key, usize> = BTreeMap::new();
-    for (_, _, p, ground) in &pins {
-        if !ground {
-            *pin_counts.entry(uf.find(*p)).or_default() += 1;
-        }
+    for (_, _, p, _) in &pins {
+        *pin_counts.entry(uf.find(*p)).or_default() += 1;
     }
     for (component_id, pin_id, p, ground) in &pins {
         if !ground && pin_counts.get(&uf.find(*p)).copied().unwrap_or(0) < 2 {
@@ -633,6 +765,14 @@ fn valid_analysis(analysis: &Analysis) -> bool {
 mod tests {
     use super::*;
     #[test]
+    fn perpendicular_wire_segments_create_an_electrical_junction() {
+        assert_eq!(
+            segment_intersection(((0, 40), (100, 40)), ((60, 0), (60, 80))),
+            Some((60, 40))
+        );
+    }
+
+    #[test]
     fn rc_is_deterministic() {
         let p = crate::domain::test_rc_project();
         let a = generate(&p).unwrap();
@@ -641,6 +781,14 @@ mod tests {
         assert!(a.contains("R1 in out 1k"));
         assert!(a.contains("C1 out 0 1u"));
         assert!(a.contains(".tran 10u 30m"));
+    }
+    #[test]
+    fn simulation_check_returns_five_passing_categories_and_the_netlist() {
+        let report = check(&crate::domain::test_rc_project());
+        assert!(report.ready);
+        assert_eq!(report.checks.len(), 5);
+        assert!(report.checks.iter().all(|item| item.passed));
+        assert!(report.netlist.is_some());
     }
     #[test]
     fn open_circuit_is_rejected() {

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type {
   Component,
   ComponentPlacement,
@@ -9,14 +9,20 @@ import type {
 } from "./types";
 import { useI18n } from "./i18n";
 import {
+  analyzeSchematic,
   GRID,
+  insertWireBend,
   nearestElectricalPoint,
   moveOrthogonalSegment,
   moveWireEndpoint,
   moveWireWithComponent,
   orthogonalRoute,
   pinPosition,
+  removeWireBend,
+  SchematicSpatialIndex,
+  samePoint,
   snapPoint,
+  wireIntersectsRect,
   wireBendFromPoints,
   type WireBend,
   type WireEndpoint,
@@ -38,8 +44,9 @@ type Props = {
     screen: Point;
   } | null;
   onExternalDropComplete: () => void;
+  focusRequest: { componentId: string; nonce: number } | null;
 };
-export function SchematicCanvas({
+export const SchematicCanvas = memo(function SchematicCanvas({
   project,
   selectedIds,
   tool,
@@ -51,6 +58,7 @@ export function SchematicCanvas({
   onPlacementComplete,
   externalDrop,
   onExternalDropComplete,
+  focusRequest,
 }: Props) {
   const { t } = useI18n();
   const canvas = useRef<HTMLCanvasElement>(null);
@@ -79,12 +87,18 @@ export function SchematicCanvas({
     startScreen: Point;
     points: Point[];
   } | null>(null);
+  const [selectedBend, setSelectedBend] = useState<{
+    wireId: string;
+    index: number;
+  } | null>(null);
   const [pointer, setPointer] = useState<Point>({ x: 0, y: 0 });
   const [box, setBox] = useState<{ start: Point; end: Point } | null>(null);
   const space = useRef(false);
   const pointerFrame = useRef<number | null>(null);
   const pendingPointer = useRef<Point | null>(null);
   const cursorEmitAt = useRef(0);
+  const viewCommitTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const lastFocusNonce = useRef<number | null>(null);
   const drawRef = useRef<() => void>(() => undefined);
   const selectedWire = useMemo(
     () =>
@@ -92,6 +106,15 @@ export function SchematicCanvas({
       null,
     [project, selectedIds],
   );
+  const spatialIndex = useMemo(
+    () =>
+      new SchematicSpatialIndex(
+        project.sheets[0].components,
+        project.sheets[0].wires,
+      ),
+    [project.sheets],
+  );
+  const diagnostics = useMemo(() => analyzeSchematic(project), [project]);
   const reshapeWire = useCallback(
     (wire: Wire, bend: WireBend) => {
       const start = wire.points[0];
@@ -110,6 +133,21 @@ export function SchematicCanvas({
     [onCommand],
   );
   useEffect(() => setView(project.uiViewState), [project.uiViewState]);
+  useEffect(() => {
+    if (!focusRequest || lastFocusNonce.current === focusRequest.nonce) return;
+    const component = project.sheets[0].components.find(
+      (item) => item.id === focusRequest.componentId,
+    );
+    const rect = host.current?.getBoundingClientRect();
+    if (!component || !rect) return;
+    lastFocusNonce.current = focusRequest.nonce;
+    const pan = {
+      x: rect.width / 2 - component.position.x * view.zoom,
+      y: rect.height / 2 - component.position.y * view.zoom,
+    };
+    setView((current) => ({ ...current, pan }));
+    onView(view.zoom, pan);
+  }, [focusRequest, onView, project.sheets, view.zoom]);
   const toWorld = useCallback(
     (p: Point): Point => ({
       x: (p.x - view.pan.x) / view.zoom,
@@ -202,18 +240,43 @@ export function SchematicCanvas({
         );
         return;
       }
+      if (
+        (e.key === "Delete" || e.key === "Backspace") &&
+        selectedBend &&
+        selectedWire?.id === selectedBend.wireId &&
+        !isEditingText
+      ) {
+        e.preventDefault();
+        e.stopImmediatePropagation();
+        const points = removeWireBend(selectedWire.points, selectedBend.index);
+        if (points !== selectedWire.points)
+          onCommand({ action: "updateWire", id: selectedWire.id, points });
+        setSelectedBend(null);
+        return;
+      }
       if (e.code === "Space") space.current = true;
     };
     const up = (e: KeyboardEvent) => {
       if (e.code === "Space") space.current = false;
     };
-    window.addEventListener("keydown", down);
+    window.addEventListener("keydown", down, true);
     window.addEventListener("keyup", up);
     return () => {
-      window.removeEventListener("keydown", down);
+      window.removeEventListener("keydown", down, true);
       window.removeEventListener("keyup", up);
     };
-  }, [reshapeWire, selectedWire, tool, wireBend, wireStart]);
+  }, [
+    onCommand,
+    reshapeWire,
+    selectedBend,
+    selectedWire,
+    tool,
+    wireBend,
+    wireStart,
+  ]);
+  useEffect(() => {
+    if (selectedBend?.wireId !== selectedWire?.id) setSelectedBend(null);
+  }, [selectedBend?.wireId, selectedWire?.id]);
   useEffect(() => {
     if (tool !== "wire") setWireStart(null);
   }, [tool]);
@@ -221,6 +284,8 @@ export function SchematicCanvas({
     () => () => {
       if (pointerFrame.current !== null)
         cancelAnimationFrame(pointerFrame.current);
+      if (viewCommitTimer.current !== null)
+        clearTimeout(viewCommitTimer.current);
     },
     [],
   );
@@ -254,24 +319,6 @@ export function SchematicCanvas({
     }
     return ids;
   }, [project, selectedIds]);
-  const disconnectedLabels = useMemo(
-    () =>
-      new Set(
-        project.sheets[0].components
-          .filter(
-            (component) =>
-              component.kind === "netLabel" &&
-              nearestElectricalPoint(
-                project,
-                component.position,
-                0.001,
-                component.id,
-              ) === null,
-          )
-          .map((component) => component.id),
-      ),
-    [project],
-  );
   const draw = useCallback(() => {
     const el = canvas.current;
     if (!el) return;
@@ -343,6 +390,23 @@ export function SchematicCanvas({
     ctx.lineWidth = Math.max(1.25, 1.5 * view.zoom);
     ctx.lineJoin = "miter";
     const current = toWorld(pointer);
+    const viewport = {
+      left: -view.pan.x / view.zoom - 100,
+      top: -view.pan.y / view.zoom - 100,
+      right: (rect.width - view.pan.x) / view.zoom + 100,
+      bottom: (rect.height - view.pan.y) / view.zoom + 100,
+    };
+    const pointVisible = (point: Point, margin = 0) =>
+      point.x >= viewport.left - margin &&
+      point.x <= viewport.right + margin &&
+      point.y >= viewport.top - margin &&
+      point.y <= viewport.bottom + margin;
+    const visibleItems = spatialIndex.query({
+      left: viewport.left - 80,
+      top: viewport.top - 80,
+      right: viewport.right + 80,
+      bottom: viewport.bottom + 80,
+    });
     const draggedComponent = drag
       ? project.sheets[0].components.find(
           (component) => component.id === drag.id,
@@ -359,9 +423,20 @@ export function SchematicCanvas({
             draggedComponent.id,
           )
         : undefined;
-    for (const wire of project.sheets[0].wires) {
+    const draggedPins = draggedComponent
+      ? draggedComponent.pins.map((pin) =>
+          pinPosition(draggedComponent, pin.offset),
+        )
+      : [];
+    for (const wire of visibleItems.wires) {
+      const start = wire.points[0];
+      const end = wire.points[wire.points.length - 1];
+      const attached =
+        draggedComponent &&
+        (draggedPins.some((pin) => samePoint(pin, start)) ||
+          draggedPins.some((pin) => samePoint(pin, end)));
       const attachedPoints =
-        draggedComponent && draggedPosition
+        attached && draggedComponent && draggedPosition
           ? moveWireWithComponent(
               wire.points,
               draggedComponent,
@@ -382,13 +457,27 @@ export function SchematicCanvas({
                 current,
               )
             : attachedPoints;
+      if (
+        !wireIntersectsRect(
+          { id: wire.id, points: wirePoints },
+          viewport.left,
+          viewport.top,
+          viewport.right,
+          viewport.bottom,
+        )
+      )
+        continue;
       ctx.beginPath();
       wirePoints.forEach((p, i) => {
         const s = toScreen(p);
         if (i === 0) ctx.moveTo(s.x, s.y);
         else ctx.lineTo(s.x, s.y);
       });
-      ctx.strokeStyle = highlightedWires.has(wire.id) ? "#2869df" : "#20865a";
+      ctx.strokeStyle = diagnostics.brokenWireIds.has(wire.id)
+        ? "#c83f49"
+        : highlightedWires.has(wire.id)
+          ? "#2869df"
+          : "#20865a";
       ctx.stroke();
       for (const p of wirePoints) {
         const s = toScreen(p);
@@ -396,15 +485,50 @@ export function SchematicCanvas({
         ctx.fillRect(s.x - 2, s.y - 2, 4, 4);
       }
     }
+    for (const point of diagnostics.junctions) {
+      if (!pointVisible(point)) continue;
+      const screen = toScreen(point);
+      ctx.beginPath();
+      ctx.fillStyle = "#176f4a";
+      ctx.arc(
+        screen.x,
+        screen.y,
+        Math.max(3.5, 4.25 * view.zoom),
+        0,
+        Math.PI * 2,
+      );
+      ctx.fill();
+    }
+    for (const wire of visibleItems.wires) {
+      [wire.points[0], wire.points[wire.points.length - 1]].forEach(
+        (point, index) => {
+          if (!diagnostics.brokenWireEndpoints.has(`${wire.id}:${index}`))
+            return;
+          if (!pointVisible(point)) return;
+          const screen = toScreen(point);
+          ctx.beginPath();
+          ctx.fillStyle = "#fff7f7";
+          ctx.strokeStyle = "#c83f49";
+          ctx.lineWidth = 2;
+          ctx.arc(screen.x, screen.y, 5.5, 0, Math.PI * 2);
+          ctx.fill();
+          ctx.stroke();
+        },
+      );
+    }
     for (const label of project.sheets[0].netLabels) {
+      if (!pointVisible(label.position, 60)) continue;
       const s = toScreen(label.position);
-      ctx.fillStyle = "#2869df";
+      ctx.fillStyle = diagnostics.disconnectedLabelIds.has(label.id)
+        ? "#c83f49"
+        : "#2869df";
       ctx.font = `600 ${12 * Math.max(0.85, view.zoom)}px SFMono-Regular, monospace`;
       ctx.fillText(label.name, s.x + 6, s.y - 6);
     }
-    for (const component of project.sheets[0].components) {
+    for (const component of visibleItems.components) {
       const dragPoint = drag?.id === component.id ? draggedPosition : undefined;
       const displayedPosition = dragPoint ?? component.position;
+      if (!pointVisible(displayedPosition, 80)) continue;
       const disconnectedLabel =
         component.kind === "netLabel" &&
         (drag?.id === component.id
@@ -414,7 +538,7 @@ export function SchematicCanvas({
               0.001,
               component.id,
             ) === null
-          : disconnectedLabels.has(component.id));
+          : diagnostics.disconnectedLabelIds.has(component.id));
       drawComponent(
         ctx,
         component,
@@ -423,6 +547,7 @@ export function SchematicCanvas({
         selectedIds.includes(component.id),
         dragPoint,
         disconnectedLabel,
+        diagnostics.floatingPinIds,
       );
     }
     if (tool === "select" && selectedWire) {
@@ -471,6 +596,18 @@ export function SchematicCanvas({
         ctx.fillStyle = "#df6718";
         ctx.arc(p.x, p.y, 2, 0, Math.PI * 2);
         ctx.fill();
+      }
+      for (let index = 1; index < points.length - 1; index += 1) {
+        const point = toScreen(points[index]);
+        const active =
+          selectedBend?.wireId === selectedWire.id &&
+          selectedBend.index === index;
+        ctx.beginPath();
+        ctx.fillStyle = active ? "#df6718" : "#ffffff";
+        ctx.strokeStyle = "#df6718";
+        ctx.rect(point.x - 4.5, point.y - 4.5, 9, 9);
+        ctx.fill();
+        ctx.stroke();
       }
     }
     if (wireStart) {
@@ -523,11 +660,13 @@ export function SchematicCanvas({
     componentSnap,
     electricalSnap,
     wireBend,
-    disconnectedLabels,
+    diagnostics,
     selectedWire,
+    selectedBend,
     tool,
     wireSegmentDrag,
     wireEndpointDrag,
+    spatialIndex,
   ]);
   drawRef.current = draw;
   useEffect(draw, [draw]);
@@ -549,48 +688,95 @@ export function SchematicCanvas({
     };
   }, []);
 
-  const hitComponent = (screen: Point) =>
-    [...project.sheets[0].components].reverse().find((c) => {
-      const p = toScreen(c.position);
-      const angle = (-c.rotation * Math.PI) / 180;
-      const dx = (screen.x - p.x) / view.zoom,
-        dy = (screen.y - p.y) / view.zoom;
-      const x = dx * Math.cos(angle) - dy * Math.sin(angle);
-      const y = dx * Math.sin(angle) + dy * Math.cos(angle);
-      const halfHeight =
-        c.kind === "subcircuit"
-          ? Math.max(38, ...c.pins.map((pin) => Math.abs(pin.offset.y) + 10))
-          : 38;
-      return Math.abs(x) < 52 && Math.abs(y) < halfHeight;
+  const hitCandidates = (screen: Point) => {
+    const world = toWorld(screen);
+    const radius = 90 / view.zoom;
+    return spatialIndex.query({
+      left: world.x - radius,
+      top: world.y - radius,
+      right: world.x + radius,
+      bottom: world.y + radius,
     });
+  };
+  const hitComponent = (screen: Point) =>
+    hitCandidates(screen)
+      .components.reverse()
+      .find((c) => {
+        const p = toScreen(c.position);
+        const angle = (-c.rotation * Math.PI) / 180;
+        const dx = (screen.x - p.x) / view.zoom,
+          dy = (screen.y - p.y) / view.zoom;
+        const x = dx * Math.cos(angle) - dy * Math.sin(angle);
+        const y = dx * Math.sin(angle) + dy * Math.cos(angle);
+        const halfHeight =
+          c.kind === "subcircuit"
+            ? Math.max(38, ...c.pins.map((pin) => Math.abs(pin.offset.y) + 10))
+            : 38;
+        return Math.abs(x) < 52 && Math.abs(y) < halfHeight;
+      });
   const hitWire = (screen: Point) =>
-    [...project.sheets[0].wires].reverse().find((wire) =>
-      wire.points.slice(1).some((point, index) => {
-        const a = toScreen(wire.points[index]),
-          b = toScreen(point),
-          dx = b.x - a.x,
-          dy = b.y - a.y,
-          lengthSquared = dx * dx + dy * dy,
-          t = lengthSquared
-            ? Math.max(
-                0,
-                Math.min(
-                  1,
-                  ((screen.x - a.x) * dx + (screen.y - a.y) * dy) /
-                    lengthSquared,
-                ),
-              )
-            : 0,
-          closest = { x: a.x + t * dx, y: a.y + t * dy };
-        return Math.hypot(screen.x - closest.x, screen.y - closest.y) < 7;
-      }),
-    );
+    hitCandidates(screen)
+      .wires.reverse()
+      .find((wire) =>
+        wire.points.slice(1).some((point, index) => {
+          const a = toScreen(wire.points[index]),
+            b = toScreen(point),
+            dx = b.x - a.x,
+            dy = b.y - a.y,
+            lengthSquared = dx * dx + dy * dy,
+            t = lengthSquared
+              ? Math.max(
+                  0,
+                  Math.min(
+                    1,
+                    ((screen.x - a.x) * dx + (screen.y - a.y) * dy) /
+                      lengthSquared,
+                  ),
+                )
+              : 0,
+            closest = { x: a.x + t * dx, y: a.y + t * dy };
+          return Math.hypot(screen.x - closest.x, screen.y - closest.y) < 7;
+        }),
+      );
   const hitWireHandle = (screen: Point, wire: Wire) => {
     for (let index = wire.points.length - 2; index >= 0; index -= 1) {
       const a = toScreen(wire.points[index]);
       const b = toScreen(wire.points[index + 1]);
       if (
         Math.hypot(screen.x - (a.x + b.x) / 2, screen.y - (a.y + b.y) / 2) <= 9
+      )
+        return index;
+    }
+    return -1;
+  };
+  const hitWireBend = (screen: Point, wire: Wire) => {
+    for (let index = wire.points.length - 2; index >= 1; index -= 1) {
+      const point = toScreen(wire.points[index]);
+      if (Math.hypot(screen.x - point.x, screen.y - point.y) <= 9) return index;
+    }
+    return -1;
+  };
+  const hitWireSegment = (screen: Point, wire: Wire) => {
+    for (let index = wire.points.length - 2; index >= 0; index -= 1) {
+      const a = toScreen(wire.points[index]);
+      const b = toScreen(wire.points[index + 1]);
+      const dx = b.x - a.x;
+      const dy = b.y - a.y;
+      const lengthSquared = dx * dx + dy * dy;
+      const ratio = lengthSquared
+        ? Math.max(
+            0,
+            Math.min(
+              1,
+              ((screen.x - a.x) * dx + (screen.y - a.y) * dy) / lengthSquared,
+            ),
+          )
+        : 0;
+      if (
+        Math.hypot(
+          screen.x - (a.x + ratio * dx),
+          screen.y - (a.y + ratio * dy),
+        ) < 7
       )
         return index;
     }
@@ -639,8 +825,14 @@ export function SchematicCanvas({
       return;
     }
     if (selectedWire) {
+      const bendIndex = hitWireBend(screen, selectedWire);
+      if (bendIndex >= 1) {
+        setSelectedBend({ wireId: selectedWire.id, index: bendIndex });
+        return;
+      }
       const endpoint = hitWireEndpoint(screen, selectedWire);
       if (endpoint) {
+        setSelectedBend(null);
         setWireEndpointDrag({
           id: selectedWire.id,
           endpoint,
@@ -651,6 +843,7 @@ export function SchematicCanvas({
       }
       const segmentIndex = hitWireHandle(screen, selectedWire);
       if (segmentIndex >= 0) {
+        setSelectedBend(null);
         setWireSegmentDrag({
           id: selectedWire.id,
           index: segmentIndex,
@@ -662,15 +855,18 @@ export function SchematicCanvas({
     }
     const hit = hitComponent(screen);
     if (hit) {
+      setSelectedBend(null);
       onSelect(e.shiftKey ? [...new Set([...selectedIds, hit.id])] : [hit.id]);
       setDrag({ id: hit.id, start: world, origin: hit.position });
     } else {
       const wire = hitWire(screen);
-      if (wire)
+      if (wire) {
+        setSelectedBend(null);
         onSelect(
           e.shiftKey ? [...new Set([...selectedIds, wire.id])] : [wire.id],
         );
-      else {
+      } else {
+        setSelectedBend(null);
         if (e.shiftKey) setBox({ start: screen, end: screen });
         else {
           onSelect([]);
@@ -812,7 +1008,9 @@ export function SchematicCanvas({
         x2 = Math.max(box.start.x, screen.x),
         y1 = Math.min(box.start.y, screen.y),
         y2 = Math.max(box.start.y, screen.y);
-      if (x2 - x1 > 4 || y2 - y1 > 4)
+      if (x2 - x1 > 4 || y2 - y1 > 4) {
+        const worldTopLeft = toWorld({ x: x1, y: y1 });
+        const worldBottomRight = toWorld({ x: x2, y: y2 });
         onSelect([
           ...new Set([
             ...selectedIds,
@@ -822,8 +1020,20 @@ export function SchematicCanvas({
                 return p.x >= x1 && p.x <= x2 && p.y >= y1 && p.y <= y2;
               })
               .map((c) => c.id),
+            ...project.sheets[0].wires
+              .filter((wire) =>
+                wireIntersectsRect(
+                  wire,
+                  worldTopLeft.x,
+                  worldTopLeft.y,
+                  worldBottomRight.x,
+                  worldBottomRight.y,
+                ),
+              )
+              .map((wire) => wire.id),
           ]),
         ]);
+      }
       setBox(null);
     }
     if (canvas.current?.hasPointerCapture(e.pointerId))
@@ -853,7 +1063,11 @@ export function SchematicCanvas({
     );
     const pan = { x: p.x - before.x * zoom, y: p.y - before.y * zoom };
     setView((v) => ({ ...v, zoom, pan }));
-    onView(zoom, pan);
+    if (viewCommitTimer.current !== null) clearTimeout(viewCommitTimer.current);
+    viewCommitTimer.current = setTimeout(() => {
+      viewCommitTimer.current = null;
+      onView(zoom, pan);
+    }, 120);
   };
   const drop = (e: React.DragEvent) => {
     e.preventDefault();
@@ -900,6 +1114,26 @@ export function SchematicCanvas({
       } else onCommand({ action: "addComponent", kind, position });
     }
   };
+  const doubleClick = (e: React.MouseEvent) => {
+    if (tool !== "select" || placement) return;
+    const rect = canvas.current?.getBoundingClientRect();
+    const screen = {
+      x: e.clientX - (rect?.left ?? 0),
+      y: e.clientY - (rect?.top ?? 0),
+    };
+    const wire = hitWire(screen);
+    if (!wire) return;
+    const insertion = insertWireBend(
+      wire.points,
+      hitWireSegment(screen, wire),
+      toWorld(screen),
+    );
+    if (!insertion) return;
+    e.preventDefault();
+    onSelect([wire.id]);
+    setSelectedBend({ wireId: wire.id, index: insertion.index });
+    onCommand({ action: "updateWire", id: wire.id, points: insertion.points });
+  };
   return (
     <div
       ref={host}
@@ -917,6 +1151,7 @@ export function SchematicCanvas({
         onPointerMove={pointerMove}
         onPointerUp={pointerUp}
         onPointerCancel={pointerCancel}
+        onDoubleClick={doubleClick}
         onWheel={wheel}
         onContextMenu={(e) => {
           e.preventDefault();
@@ -972,7 +1207,7 @@ export function SchematicCanvas({
             V → H
           </button>
           <span className="wire-edit-hint">
-            {t("Drag endpoints to reconnect or square handles to reshape")}
+            {t("Double-click to add a bend; select a bend and press Delete")}
           </span>
         </div>
       )}
@@ -981,7 +1216,7 @@ export function SchematicCanvas({
       </div>
     </div>
   );
-}
+});
 
 function sameScreenPoint(a: Point, b: Point) {
   return Math.abs(a.x - b.x) < 0.001 && Math.abs(a.y - b.y) < 0.001;
@@ -995,6 +1230,7 @@ function drawComponent(
   selected: boolean,
   dragPoint?: Point,
   invalid = false,
+  floatingPinIds = new Set<string>(),
 ) {
   const center = toScreen(dragPoint ?? c.position);
   ctx.save();
@@ -1123,10 +1359,19 @@ function drawComponent(
     ctx.textAlign = "left";
   }
   for (const pin of c.pins) {
+    const floating = floatingPinIds.has(`${c.id}:${pin.id}`);
     ctx.beginPath();
-    ctx.fillStyle = invalid ? "#c83f49" : selected ? "#2869df" : "#20865a";
-    ctx.arc(pin.offset.x, pin.offset.y, 3.2, 0, Math.PI * 2);
+    ctx.fillStyle =
+      invalid || floating ? "#c83f49" : selected ? "#2869df" : "#20865a";
+    ctx.arc(pin.offset.x, pin.offset.y, floating ? 4.2 : 3.2, 0, Math.PI * 2);
     ctx.fill();
+    if (floating) {
+      ctx.beginPath();
+      ctx.strokeStyle = "#c83f49";
+      ctx.lineWidth = 1.3;
+      ctx.arc(pin.offset.x, pin.offset.y, 7, 0, Math.PI * 2);
+      ctx.stroke();
+    }
   }
   ctx.restore();
   ctx.fillStyle = invalid ? "#c83f49" : selected ? "#1f57bd" : "#20242b";

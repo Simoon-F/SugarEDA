@@ -19,6 +19,14 @@ pub enum ProjectError {
     Schema(u32),
     #[error("project must contain at least one schematic sheet")]
     NoSheets,
+    #[error("project contains an invalid component coordinate")]
+    InvalidComponentCoordinate,
+    #[error("project contains a wire with fewer than two points")]
+    InvalidWire,
+    #[error("project contains a non-finite or non-orthogonal wire segment")]
+    InvalidWireGeometry,
+    #[error("project contains an invalid canvas view")]
+    InvalidView,
     #[error("embedded SPICE model is invalid: {0}")]
     Model(#[from] ModelImportError),
 }
@@ -69,6 +77,41 @@ pub fn validate(project: &Project) -> Result<(), ProjectError> {
     if project.sheets.is_empty() {
         return Err(ProjectError::NoSheets);
     }
+    for sheet in &project.sheets {
+        if sheet.components.iter().any(|component| {
+            !component.position.x.is_finite()
+                || !component.position.y.is_finite()
+                || component
+                    .pins
+                    .iter()
+                    .any(|pin| !pin.offset.x.is_finite() || !pin.offset.y.is_finite())
+        }) {
+            return Err(ProjectError::InvalidComponentCoordinate);
+        }
+        for wire in &sheet.wires {
+            if wire.points.len() < 2 {
+                return Err(ProjectError::InvalidWire);
+            }
+            if wire
+                .points
+                .iter()
+                .any(|point| !point.x.is_finite() || !point.y.is_finite())
+                || wire.points.windows(2).any(|segment| {
+                    (segment[0].x - segment[1].x).abs() > 0.001
+                        && (segment[0].y - segment[1].y).abs() > 0.001
+                })
+            {
+                return Err(ProjectError::InvalidWireGeometry);
+            }
+        }
+    }
+    if !project.ui_view_state.zoom.is_finite()
+        || !(0.2..=4.0).contains(&project.ui_view_state.zoom)
+        || !project.ui_view_state.pan.x.is_finite()
+        || !project.ui_view_state.pan.y.is_finite()
+    {
+        return Err(ProjectError::InvalidView);
+    }
     for library in &project.spice_libraries {
         crate::models::validate_library(library)?;
     }
@@ -85,5 +128,21 @@ mod tests {
         let project = crate::domain::test_rc_project();
         save(&path, &project).unwrap();
         assert_eq!(project, load(&path).unwrap());
+    }
+
+    #[test]
+    fn rejects_invalid_wire_geometry_before_it_reaches_the_canvas() {
+        let mut project = crate::domain::Project::blank("invalid");
+        project.sheets[0].wires.push(crate::domain::Wire {
+            id: uuid::Uuid::new_v4(),
+            points: vec![
+                crate::domain::Point { x: 0.0, y: 0.0 },
+                crate::domain::Point { x: 20.0, y: 20.0 },
+            ],
+        });
+        assert!(matches!(
+            validate(&project),
+            Err(ProjectError::InvalidWireGeometry)
+        ));
     }
 }

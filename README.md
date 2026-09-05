@@ -1,63 +1,115 @@
-# SugarEDA
+<div align="center">
+  <img src="src-tauri/icons/128x128.png" width="88" alt="SugarEDA icon" />
+  <h1>SugarEDA</h1>
+  <p><strong>专注于原理图编辑与 SPICE 仿真的跨平台桌面工作台。</strong></p>
+  <p>Rust 负责工程模型与仿真边界，React + Canvas 提供紧凑、顺滑的工程界面。</p>
+</div>
 
-SugarEDA is a focused cross-platform schematic capture and SPICE simulation workbench. This first MVP combines a Rust-owned engineering model with a high-density Tauri 2 / React desktop interface.
+> 当前版本：`0.2.0 Alpha`。项目文件可读、可迁移，但仍建议为重要设计保留版本控制或外部备份。
 
-## MVP features
+## 已实现
 
-- Canvas-rendered schematic editor with grid snapping, zoom around cursor, pan, box selection, move, rotate, delete, component drag/drop, pin snapping, and orthogonal wires.
-- Resistor, capacitor, inductor, voltage/current source, ground, and net-label primitives.
-- Rust-owned semantic edit commands with a 100-entry Undo/Redo history.
-- Versioned, human-readable `.sugeda` project files with validated loading and atomic writes.
-- Deterministic SPICE netlist generation with checks for ground, floating pins, references, labels, and parameter injection.
-- `SimulationBackend` abstraction and an ngspice child-process implementation with detection, cancellation, temp workspace cleanup, logs, and ASCII raw-result parsing.
-- Operating Point, DC Sweep, Transient, and AC Sweep profiles with voltage/current probes.
-- Portable SPICE model import: diode, BJT, MOSFET (source-tied bulk), and pin-ordered subcircuit symbols, with source text and SHA-256 embedded in the project.
-- AC magnitude/dB/phase plots, logarithmic frequency axis, complete operating-point tables, and CSV export.
-- Canvas waveform viewer with multi-signal visibility, engineering units, cursor readings, mouse-centered zoom, logs, and explicit empty/running/error states.
+### 原理图编辑
 
-## Development
+- 电阻、电容、电感、电压源、电流源、接地与网络标签。
+- 网格吸附、缩放、平移、框选、旋转、删除和正交布线。
+- 导线交点与 T 型连接节点、拐点增删、端点重接和线段整形。
+- 元件移动时自动拉伸已连接导线。
+- 元件与导线复制、粘贴、快速复制及方向键微调。
+- 悬空引脚、断线、未连接标签直接在画布标红。
+- 导入并随项目嵌入二极管、BJT、MOSFET 和子电路 SPICE 模型。
 
-Prerequisites: Node.js 22+, npm or pnpm, Rust stable, and the [Tauri 2 platform prerequisites](https://v2.tauri.app/start/prerequisites/). Building ngspice requires a C/C++ compiler, bash, make, curl, and tar.
+### 仿真与测量
 
-```sh
+- Operating Point、Transient、DC Sweep 与 AC Sweep。
+- 运行前检查接地、引脚、网络标签、探针和分析参数。
+- 检查错误可点击，并自动定位到画布中的对应元件。
+- 从已有网络选择电压/电流探针，无需手写表达式。
+- 多套仿真配置可新增、切换、重命名和删除。
+- 明确区分网表生成成功与 ngspice 计算成功。
+- 波形双游标、差值、频率、最大值/最小值、相位和 CSV 导出。
+
+### 工程可靠性
+
+- 编辑后防抖自动保存恢复副本；异常退出后启动时可恢复或放弃。
+- 新建、打开和关闭时统一处理未保存修改：保存并继续、放弃或取消。
+- 最近项目列表会标记已移动/删除的文件，并可直接清理失效记录。
+- `.sugeda` 使用带版本号的可读 JSON；正式保存和恢复数据均采用临时文件原子替换。
+- 3,000 元件大型原理图性能回归测试与视口空间索引。
+- 基于 `tauri-driver` 的真实桌面自动化，覆盖启动、编辑、Rust 自动保存和未保存拦截。
+
+## 快速开始
+
+### 环境要求
+
+- Node.js 22+
+- Rust stable
+- [Tauri 2 平台依赖](https://v2.tauri.app/start/prerequisites/)
+- 从源码构建 ngspice 时还需要 C/C++ 编译器、`bash`、`make`、`curl` 和 `tar`
+
+```bash
 npm install
-pnpm build:ngspice
 npm run tauri dev
 ```
 
-The browser-only UI preview is available with `npm run dev`. It starts with an in-memory blank project; file and simulation operations remain desktop-only. A real Tauri session always treats the Rust workspace as the source of truth.
+只查看界面可以运行：
 
-## Bundled ngspice
+```bash
+npm run dev
+```
 
-The local macOS Apple Silicon bundle now contains a source-built ngspice 47. End users of a prepared installer do not install it separately. Build the pinned headless engine on macOS/Linux, then package:
+浏览器预览使用内存项目，不提供文件读写与真实 ngspice 仿真；桌面应用始终以 Rust 工作区为数据源。
 
-```sh
-pnpm build:ngspice
+### 打包内置 ngspice
+
+macOS/Linux 可以从校验过的 ngspice 47 源码构建无界面版本：
+
+```bash
+npm run build:ngspice
 npm run tauri build
 ```
 
-For Windows, use `pnpm prepare:ngspice /trusted/payload-directory` with a self-contained native executable, required DLLs, and notices. Windows builds/installers have not been verified. Source checkouts do not commit third-party binaries. For development or recovery, a local override remains available:
+Windows 构建使用受信任的自包含 payload：
 
-```sh
+```bash
+npm run prepare:ngspice -- /absolute/path/to/ngspice-payload
+npm run tauri build
+```
+
+开发时也可以指定本地引擎：
+
+```bash
 export SUGAREDA_NGSPICE_PATH="/absolute/path/to/ngspice"
 npm run tauri dev
 ```
 
-An executable path can also be entered in **Configure**. Resolution order is UI override, `SUGAREDA_NGSPICE_PATH`, bundled binary, then system `PATH`. The builder includes root upstream notices and source provenance; public distribution still requires a release/license review. See [distribution notes](docs/NGSPICE_DISTRIBUTION.md).
+解析顺序为：界面指定路径 → `SUGAREDA_NGSPICE_PATH` → 应用内置引擎 → 系统 `PATH`。
 
-## Try the simulation tools
+## 常用操作
 
-The app defaults to Chinese and opens a blank project. Language selection is available in the top bar and persists locally. Follow the [Chinese user test guide](docs/USER_TEST_GUIDE.zh-CN.md) to draw an RC circuit yourself and verify the complete solver path.
+| 操作                   | 快捷键                            |
+| ---------------------- | --------------------------------- |
+| 新建 / 打开 / 保存     | `Cmd/Ctrl+N` / `O` / `S`          |
+| 撤销 / 重做            | `Cmd/Ctrl+Z` / `Shift+Cmd/Ctrl+Z` |
+| 复制 / 粘贴 / 快速复制 | `Cmd/Ctrl+C` / `V` / `D`          |
+| 微调选择               | `方向键`；按住 `Shift` 按网格移动 |
+| 删除选择或选中拐点     | `Delete` / `Backspace`            |
+| 导线切换 L 型方向      | 绘制或选中导线时按 `Tab`          |
+| 增加导线拐点           | 双击导线                          |
+| 仿真检查               | `Shift+F4`                        |
+| 运行 / 停止仿真        | `F5` / `Shift+F5`                 |
 
-1. Run `pnpm tauri dev`, then follow the manual guide to place and connect the RC circuit.
-2. In **Configure**, choose OP/DC/AC and enter sweep values. Separate probes with semicolons: `v(out); i(v1)`. Blank means all signals.
-3. For AC, change V1's value to `DC 0 AC 1`, choose AC Sweep, then use Magnitude/dB/Phase in the waveform toolbar.
-4. Click the import button beside **COMPONENTS**, open `examples/models/learning.lib`, and drag its models onto the schematic. Wire pins according to their names/order. These are generic teaching models, not vendor-calibrated devices.
-5. Export results from the waveform toolbar as CSV. See [model-library guidance](docs/MODEL_LIBRARY.md).
+## 数据安全模型
 
-## Verification
+正式项目保存到用户选择的 `.sugeda` 文件。编辑过程中，桌面端在最后一次变更约 900 ms 后写入独立恢复副本；成功正式保存、新建或打开其他项目后会清除旧恢复副本。若进程异常中止，下一次启动会显示恢复内容、来源路径、保存时间和元件/导线数量。
 
-```sh
+恢复副本和最近项目索引位于操作系统为 `com.simonf.sugareda` 分配的应用数据目录，不会覆盖正式项目文件。
+
+## 验证
+
+日常完整检查：
+
+```bash
 npm run format
 npm run typecheck
 npm run lint
@@ -66,16 +118,43 @@ npm run build
 cargo fmt --manifest-path src-tauri/Cargo.toml --check
 cargo clippy --manifest-path src-tauri/Cargo.toml --all-targets -- -D warnings
 cargo test --manifest-path src-tauri/Cargo.toml
-npm run tauri build -- --debug --no-bundle
 ```
 
-The architecture, file contract, and next-stage boundaries are documented in [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md), [`docs/FILE_FORMAT.md`](docs/FILE_FORMAT.md), and [`docs/ROADMAP.md`](docs/ROADMAP.md).
+单独运行大型原理图性能门槛：
 
-## Current limits
+```bash
+npm run test:performance
+```
 
-- One schematic sheet is editable at a time.
-- Wires support click-to-click orthogonal routing, L-bend switching, and grid-snapped segment reshaping; explicit junction editing is not yet included.
-- Results currently cross the Tauri command boundary as JSON. The result type is isolated so a channel or binary result-file transport can replace it without changing the domain model.
-- macOS is verified in this repository; Windows and Linux builds rely on Tauri's portable APIs but still require platform CI.
-- No RK3576 functional simulation, IBIS engine, encrypted vendor models, or automatic vendor downloads.
-- Libraries must be self-contained text; external includes, instance parameter editing, and arbitrary pin remapping remain future work.
+真实桌面自动化使用编译后的 Tauri 应用和系统 WebView：
+
+```bash
+cargo install tauri-driver --locked
+npm run test:desktop
+```
+
+原生 `tauri-driver` 支持 Linux/Windows；仓库中的 `Quality` 工作流在 Linux + Xvfb 下实际执行。macOS 本地运行会明确跳过该脚本，因为系统 WKWebView 没有可供原生驱动使用的 WebDriver。
+
+## 代码结构
+
+```text
+src/                         React 工作台、Canvas 原理图和波形界面
+src-tauri/src/application.rs Rust 编辑命令、Undo/Redo 与工作区状态
+src-tauri/src/project.rs     项目校验和原子保存
+src-tauri/src/reliability.rs 自动恢复与最近项目
+src-tauri/src/netlist.rs     电气检查和确定性 SPICE 网表
+src-tauri/src/simulation.rs  ngspice 进程、取消和结果解析
+test/                        单元、几何、波形与大型图性能测试
+scripts/desktop-smoke.mjs    真实桌面 WebDriver 冒烟测试
+```
+
+## 当前边界
+
+- 当前一次编辑一张原理图。
+- 波形数据仍通过 Tauri JSON 命令边界传输；后续可替换为通道或二进制结果文件。
+- Windows/macOS 已配置桌面打包；Linux 主要用于自动化测试，发布包仍需单独验证。
+- 外部 `.include`、任意引脚映射、IBIS、加密厂商模型和自动下载尚未实现。
+
+---
+
+**English summary:** SugarEDA is an open-source Tauri 2 schematic capture and SPICE simulation workbench. It includes structured electrical preflight checks, network-based probes, dual-cursor waveform measurements, atomic project files, crash recovery, recent projects, large-sheet performance coverage, and real desktop WebDriver smoke tests.

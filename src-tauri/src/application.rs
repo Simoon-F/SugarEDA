@@ -1,10 +1,10 @@
 use crate::domain::{
-    component, modeled_component, Analysis, ComponentKind, Point, Project, SimulationProfile,
-    SpiceLibrary, Wire,
+    component, modeled_component, Analysis, Component, ComponentKind, Point, Project,
+    SimulationProfile, SpiceLibrary, Wire,
 };
 use chrono::Utc;
 use serde::{Deserialize, Serialize};
-use std::path::PathBuf;
+use std::{collections::HashSet, path::PathBuf};
 use uuid::Uuid;
 
 #[derive(Debug, Clone, Serialize)]
@@ -45,6 +45,11 @@ pub enum EditorCommand {
         id: Uuid,
         position: Point,
     },
+    MoveSelection {
+        component_ids: Vec<Uuid>,
+        wire_ids: Vec<Uuid>,
+        delta: Point,
+    },
     UpdateComponent {
         id: Uuid,
         display_name: String,
@@ -57,6 +62,10 @@ pub enum EditorCommand {
     DeleteSelection {
         component_ids: Vec<Uuid>,
         wire_ids: Vec<Uuid>,
+    },
+    InsertSelection {
+        components: Vec<Component>,
+        wires: Vec<Wire>,
     },
     AddWire {
         points: Vec<Point>,
@@ -75,6 +84,15 @@ pub enum EditorCommand {
     },
     UpdateSimulation {
         profile: SimulationProfile,
+    },
+    AddSimulationProfile {
+        profile: SimulationProfile,
+    },
+    DeleteSimulationProfile {
+        id: Uuid,
+    },
+    SelectSimulationProfile {
+        id: Uuid,
     },
 }
 
@@ -97,12 +115,19 @@ impl Workspace {
             can_redo: !self.redo.is_empty(),
         }
     }
+    pub fn is_dirty(&self) -> bool {
+        self.dirty
+    }
     pub fn replace(&mut self, project: Project, path: Option<PathBuf>) {
         self.project = project;
         self.path = path;
         self.dirty = false;
         self.undo.clear();
         self.redo.clear();
+    }
+    pub fn restore(&mut self, project: Project, path: Option<PathBuf>) {
+        self.replace(project, path);
+        self.dirty = true;
     }
     pub fn mark_saved(&mut self, path: PathBuf) {
         self.path = Some(path);
@@ -129,6 +154,22 @@ impl Workspace {
         }
     }
     pub fn apply(&mut self, command: EditorCommand) -> Result<(), String> {
+        if let EditorCommand::UpdateView {
+            zoom,
+            pan,
+            grid_visible,
+        } = &command
+        {
+            if !zoom.is_finite() || !pan.x.is_finite() || !pan.y.is_finite() {
+                return Err("Canvas view must contain finite coordinates".into());
+            }
+            self.project.ui_view_state.zoom = zoom.clamp(0.2, 4.0);
+            self.project.ui_view_state.pan = *pan;
+            self.project.ui_view_state.grid_visible = *grid_visible;
+            self.project.updated_at = Utc::now();
+            self.dirty = true;
+            return Ok(());
+        }
         let before = self.project.clone();
         match command {
             EditorCommand::AddComponent { kind, position } => {
@@ -230,6 +271,68 @@ impl Workspace {
                     wire.points = move_wire_with_component(&wire.points, &attached_pins, delta);
                 }
             }
+            EditorCommand::MoveSelection {
+                component_ids,
+                wire_ids,
+                delta,
+            } => {
+                if !delta.x.is_finite() || !delta.y.is_finite() {
+                    return Err("Movement delta must be finite".into());
+                }
+                let sheet = &mut self.project.sheets[0];
+                let component_ids: HashSet<_> = component_ids.into_iter().collect();
+                let wire_ids: HashSet<_> = wire_ids.into_iter().collect();
+                let attached_pins: Vec<_> = sheet
+                    .components
+                    .iter()
+                    .filter(|component| {
+                        component_ids.contains(&component.id)
+                            && component.kind != ComponentKind::NetLabel
+                    })
+                    .flat_map(|component| {
+                        component.pins.iter().map(|pin| {
+                            absolute_pin(component.position, component.rotation, pin.offset)
+                        })
+                    })
+                    .collect();
+                for component in &mut sheet.components {
+                    if component_ids.contains(&component.id) {
+                        component.position.x += delta.x;
+                        component.position.y += delta.y;
+                    }
+                }
+                for wire in &mut sheet.wires {
+                    if wire_ids.contains(&wire.id) {
+                        for point in &mut wire.points {
+                            point.x += delta.x;
+                            point.y += delta.y;
+                        }
+                        continue;
+                    }
+                    let start = wire.points[0];
+                    let end = wire.points[wire.points.len() - 1];
+                    if attached_pins.iter().any(|pin| same_point(*pin, start)) {
+                        wire.points = move_wire_endpoint(
+                            &wire.points,
+                            true,
+                            Point {
+                                x: start.x + delta.x,
+                                y: start.y + delta.y,
+                            },
+                        );
+                    }
+                    if attached_pins.iter().any(|pin| same_point(*pin, end)) {
+                        wire.points = move_wire_endpoint(
+                            &wire.points,
+                            false,
+                            Point {
+                                x: end.x + delta.x,
+                                y: end.y + delta.y,
+                            },
+                        );
+                    }
+                }
+            }
             EditorCommand::UpdateComponent {
                 id,
                 display_name,
@@ -253,6 +356,45 @@ impl Workspace {
                 sheet.components.retain(|c| !component_ids.contains(&c.id));
                 sheet.wires.retain(|w| !wire_ids.contains(&w.id));
             }
+            EditorCommand::InsertSelection { components, wires } => {
+                let sheet = &mut self.project.sheets[0];
+                let mut ids: HashSet<_> = sheet
+                    .components
+                    .iter()
+                    .map(|component| component.id)
+                    .chain(sheet.wires.iter().map(|wire| wire.id))
+                    .collect();
+                let mut references: HashSet<_> = sheet
+                    .components
+                    .iter()
+                    .filter(|component| !component.spice_ref.is_empty())
+                    .map(|component| component.spice_ref.to_ascii_lowercase())
+                    .collect();
+                for component in &components {
+                    if !component.position.x.is_finite() || !component.position.y.is_finite() {
+                        return Err("Component coordinates must be finite".into());
+                    }
+                    if !ids.insert(component.id) {
+                        return Err(format!("Item {} already exists", component.id));
+                    }
+                    if !component.spice_ref.is_empty()
+                        && !references.insert(component.spice_ref.to_ascii_lowercase())
+                    {
+                        return Err(format!(
+                            "Component reference '{}' already exists",
+                            component.spice_ref
+                        ));
+                    }
+                }
+                for wire in &wires {
+                    validate_wire_points(&wire.points)?;
+                    if !ids.insert(wire.id) {
+                        return Err(format!("Item {} already exists", wire.id));
+                    }
+                }
+                sheet.components.extend(components);
+                sheet.wires.extend(wires);
+            }
             EditorCommand::AddWire { points } => {
                 validate_wire_points(&points)?;
                 self.project.sheets[0].wires.push(Wire {
@@ -271,14 +413,10 @@ impl Workspace {
             }
             EditorCommand::DeleteWire { id } => self.project.sheets[0].wires.retain(|w| w.id != id),
             EditorCommand::UpdateView {
-                zoom,
-                pan,
-                grid_visible,
-            } => {
-                self.project.ui_view_state.zoom = zoom.clamp(0.2, 4.0);
-                self.project.ui_view_state.pan = pan;
-                self.project.ui_view_state.grid_visible = grid_visible;
-            }
+                zoom: _,
+                pan: _,
+                grid_visible: _,
+            } => unreachable!("view commands return before the undoable edit path"),
             EditorCommand::UpdateSimulation { profile } => {
                 if let Some(target) = self
                     .project
@@ -290,6 +428,44 @@ impl Workspace {
                 } else {
                     self.project.simulation_profiles.push(profile)
                 }
+            }
+            EditorCommand::AddSimulationProfile { profile } => {
+                if self
+                    .project
+                    .simulation_profiles
+                    .iter()
+                    .any(|existing| existing.id == profile.id)
+                {
+                    return Err(format!("Simulation profile {} already exists", profile.id));
+                }
+                self.project.active_simulation_profile = Some(profile.id);
+                self.project.simulation_profiles.push(profile);
+            }
+            EditorCommand::DeleteSimulationProfile { id } => {
+                if self.project.simulation_profiles.len() <= 1 {
+                    return Err("A project needs at least one simulation profile".into());
+                }
+                self.project
+                    .simulation_profiles
+                    .retain(|profile| profile.id != id);
+                if self.project.active_simulation_profile == Some(id) {
+                    self.project.active_simulation_profile = self
+                        .project
+                        .simulation_profiles
+                        .first()
+                        .map(|profile| profile.id);
+                }
+            }
+            EditorCommand::SelectSimulationProfile { id } => {
+                if !self
+                    .project
+                    .simulation_profiles
+                    .iter()
+                    .any(|profile| profile.id == id)
+                {
+                    return Err(format!("Simulation profile {id} no longer exists"));
+                }
+                self.project.active_simulation_profile = Some(id);
             }
         }
         self.project.updated_at = Utc::now();
@@ -569,5 +745,91 @@ mod tests {
             w.project.sheets[0].wires[0].points,
             vec![Point { x: 60., y: 100. }, Point { x: 0., y: 100. }]
         );
+    }
+
+    #[test]
+    fn moving_a_selection_translates_selected_wires_and_stretches_unselected_wires() {
+        let mut w = Workspace::new(Project::blank("x"));
+        w.apply(EditorCommand::AddComponent {
+            kind: ComponentKind::Resistor,
+            position: Point { x: 100., y: 100. },
+        })
+        .unwrap();
+        let component_id = w.project.sheets[0].components[0].id;
+        w.apply(EditorCommand::AddWire {
+            points: vec![Point { x: 60., y: 100. }, Point { x: 0., y: 100. }],
+        })
+        .unwrap();
+        w.apply(EditorCommand::MoveSelection {
+            component_ids: vec![component_id],
+            wire_ids: vec![],
+            delta: Point { x: 1., y: 0. },
+        })
+        .unwrap();
+        assert_eq!(w.project.sheets[0].components[0].position.x, 101.);
+        assert_eq!(w.project.sheets[0].wires[0].points[0].x, 61.);
+    }
+
+    #[test]
+    fn inserts_a_copied_selection_as_one_undoable_edit() {
+        let mut w = Workspace::new(Project::blank("x"));
+        let copied = component(ComponentKind::Resistor, 120., 120., "R2", "1k");
+        let copied_id = copied.id;
+        w.apply(EditorCommand::InsertSelection {
+            components: vec![copied],
+            wires: vec![Wire {
+                id: Uuid::new_v4(),
+                points: vec![Point { x: 80., y: 120. }, Point { x: 20., y: 120. }],
+            }],
+        })
+        .unwrap();
+        assert_eq!(w.project.sheets[0].components[0].id, copied_id);
+        assert_eq!(w.project.sheets[0].wires.len(), 1);
+        assert!(w.undo());
+        assert!(w.project.sheets[0].components.is_empty());
+        assert!(w.project.sheets[0].wires.is_empty());
+    }
+
+    #[test]
+    fn adds_selects_and_deletes_simulation_profiles() {
+        let mut w = Workspace::new(Project::blank("x"));
+        let original = w.project.active_simulation_profile.unwrap();
+        let profile = SimulationProfile {
+            id: Uuid::new_v4(),
+            name: "AC response".into(),
+            analysis: Analysis::AcSweep {
+                variation: "dec".into(),
+                points: 100,
+                start: "10".into(),
+                stop: "1Meg".into(),
+            },
+            signals: vec![],
+        };
+        let profile_id = profile.id;
+        w.apply(EditorCommand::AddSimulationProfile { profile })
+            .unwrap();
+        assert_eq!(w.project.active_simulation_profile, Some(profile_id));
+        assert_eq!(w.project.simulation_profiles.len(), 2);
+        w.apply(EditorCommand::SelectSimulationProfile { id: original })
+            .unwrap();
+        w.apply(EditorCommand::DeleteSimulationProfile { id: profile_id })
+            .unwrap();
+        assert_eq!(w.project.simulation_profiles.len(), 1);
+        assert_eq!(w.project.active_simulation_profile, Some(original));
+    }
+
+    #[test]
+    fn viewport_updates_do_not_clone_into_undo_history() {
+        let mut w = Workspace::new(Project::blank("large"));
+        w.apply(EditorCommand::UpdateView {
+            zoom: 1.5,
+            pan: Point { x: 40.0, y: -20.0 },
+            grid_visible: false,
+        })
+        .unwrap();
+        let snapshot = w.snapshot();
+        assert!(snapshot.dirty);
+        assert!(!snapshot.can_undo);
+        assert_eq!(snapshot.project.ui_view_state.zoom, 1.5);
     }
 }

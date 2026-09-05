@@ -7,7 +7,9 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Button } from "@/components/ui/button";
+import { Plus, Trash2 } from "lucide-react";
 import type { BackendStatus, SimulationProfile } from "./types";
+import type { ProbeOption } from "./simulation-check";
 import { useI18n } from "./i18n";
 
 function Field({
@@ -44,23 +46,66 @@ function Field({
 
 export function SimulationConfig({
   profile,
+  profiles,
+  probeOptions,
   path,
   status,
   onPath,
   onRefresh,
   onUpdate,
+  onSelectProfile,
+  onAddProfile,
+  onDeleteProfile,
 }: {
   profile: SimulationProfile;
+  profiles: SimulationProfile[];
+  probeOptions: ProbeOption[];
   path: string;
   status: BackendStatus;
   onPath: (path: string) => void;
   onRefresh: () => void;
   onUpdate: (change: Partial<SimulationProfile>) => void;
+  onSelectProfile: (id: string) => void;
+  onAddProfile: () => void;
+  onDeleteProfile: () => void;
 }) {
   const { t } = useI18n();
   const analysis = profile.analysis;
   return (
     <div className="simulation-config">
+      <div className="profile-fields">
+        <label>
+          {t("SIMULATION PROFILE")}
+          <Select value={profile.id} onValueChange={onSelectProfile}>
+            <SelectTrigger aria-label={t("SIMULATION PROFILE")}>
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {profiles.map((item) => (
+                <SelectItem key={item.id} value={item.id}>
+                  {item.name}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </label>
+        <Field
+          label={t("PROFILE NAME")}
+          value={profile.name}
+          onCommit={(name) => name && onUpdate({ name })}
+        />
+        <Button variant="outline" onClick={onAddProfile}>
+          <Plus /> {t("New profile")}
+        </Button>
+        <Button
+          variant="outline"
+          onClick={onDeleteProfile}
+          disabled={profiles.length <= 1}
+          title={t("Delete profile")}
+        >
+          <Trash2 />
+        </Button>
+      </div>
       <div className="analysis-fields">
         <label>
           {t("ANALYSIS")}
@@ -175,19 +220,67 @@ export function SimulationConfig({
         )}
       </div>
       <div className="solver-fields">
-        <Field
-          label={t("PROBES · SEPARATE WITH ;")}
-          value={profile.signals.join("; ")}
-          placeholder={t("Blank = all signals · v(out); v(out,in); i(v1)")}
-          onCommit={(value) =>
-            onUpdate({
-              signals: value
-                .split(";")
-                .map((signal) => signal.trim())
-                .filter(Boolean),
-            })
-          }
-        />
+        <div className="probe-selector">
+          <span>{t("PROBES FROM SCHEMATIC")}</span>
+          <div>
+            {probeOptions.map((option) => {
+              const selected = profile.signals.some(
+                (signal) => signal.toLowerCase() === option.value.toLowerCase(),
+              );
+              return (
+                <button
+                  key={option.value}
+                  type="button"
+                  className={option.kind}
+                  aria-pressed={selected}
+                  onClick={() =>
+                    onUpdate({
+                      signals: selected
+                        ? profile.signals.filter(
+                            (signal) =>
+                              signal.toLowerCase() !==
+                              option.value.toLowerCase(),
+                          )
+                        : [...profile.signals, option.value],
+                    })
+                  }
+                >
+                  <i>{option.kind === "voltage" ? "V" : "I"}</i>
+                  {option.label}
+                </button>
+              );
+            })}
+            {profile.signals
+              .filter(
+                (signal) =>
+                  !probeOptions.some(
+                    (option) =>
+                      option.value.toLowerCase() === signal.toLowerCase(),
+                  ),
+              )
+              .map((signal) => (
+                <button
+                  key={signal}
+                  type="button"
+                  className="unavailable"
+                  aria-pressed="true"
+                  title={t("Probe is unavailable; click to remove")}
+                  onClick={() =>
+                    onUpdate({
+                      signals: profile.signals.filter(
+                        (item) => item !== signal,
+                      ),
+                    })
+                  }
+                >
+                  ! {signal}
+                </button>
+              ))}
+            {!probeOptions.length && (
+              <em>{t("Place a network label to make it available here")}</em>
+            )}
+          </div>
+        </div>
         <Field
           label={t("NGSPICE PATH · OPTIONAL")}
           value={path}

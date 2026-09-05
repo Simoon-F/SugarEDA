@@ -620,7 +620,7 @@ mod tests {
         let mut workspace = crate::application::Workspace::new(crate::domain::test_rc_project());
         workspace.add_spice_library(library.clone()).unwrap();
         // Exercise the webview's camelCase IPC payload and portable project persistence.
-        let command = serde_json::from_value(serde_json::json!({"action":"addModelComponent", "libraryId":library.id, "modelName":"SUGAR_FILTER", "position":{"x":600,"y":500}})).unwrap();
+        let command = serde_json::from_value(serde_json::json!({"action":"addModelComponent", "libraryId":library.id, "modelName":"SUGAR_FILTER", "position":{"x":320,"y":240}})).unwrap();
         workspace.apply(command).unwrap();
         // Replace the discrete RC with the imported filter and connect by declared pin order.
         use crate::domain::{ComponentKind, Point, Wire};
@@ -639,12 +639,17 @@ mod tests {
         ];
         sheet.wires.clear();
         for (pin, endpoint) in filter.pins.iter().zip(endpoints) {
+            let start = Point {
+                x: filter.position.x + pin.offset.x,
+                y: filter.position.y + pin.offset.y,
+            };
             sheet.wires.push(Wire {
                 id: uuid::Uuid::new_v4(),
                 points: vec![
+                    start,
                     Point {
-                        x: filter.position.x + pin.offset.x,
-                        y: filter.position.y + pin.offset.y,
+                        x: endpoint.x,
+                        y: start.y,
                     },
                     endpoint,
                 ],
@@ -660,11 +665,21 @@ mod tests {
         ));
         sheet.wires.push(Wire {
             id: uuid::Uuid::new_v4(),
-            points: vec![Point { x: 460., y: 170. }, Point { x: 320., y: 310. }],
+            points: vec![
+                Point { x: 460., y: 170. },
+                Point { x: 500., y: 170. },
+                Point { x: 500., y: 310. },
+                Point { x: 320., y: 310. },
+            ],
         });
         sheet.wires.push(Wire {
             id: uuid::Uuid::new_v4(),
-            points: vec![Point { x: 180., y: 230. }, Point { x: 320., y: 310. }],
+            points: vec![
+                Point { x: 180., y: 230. },
+                Point { x: 140., y: 230. },
+                Point { x: 140., y: 310. },
+                Point { x: 320., y: 310. },
+            ],
         });
         let dir = tempfile::tempdir().unwrap();
         let path = dir.path().join("model.sugeda");

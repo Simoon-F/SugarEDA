@@ -4,6 +4,7 @@ mod export;
 mod models;
 mod netlist;
 mod project;
+mod reliability;
 mod simulation;
 
 use application::{EditorCommand, Workspace, WorkspaceSnapshot};
@@ -15,6 +16,7 @@ use tauri::{Manager, State};
 struct AppState {
     workspace: Mutex<Workspace>,
     simulator: NgSpiceBackend,
+    reliability: reliability::ReliabilityStore,
 }
 
 #[tauri::command]
@@ -34,6 +36,7 @@ fn new_project(
         .workspace
         .lock()
         .map_err(|_| "Workspace lock was poisoned".to_owned())?;
+    state.reliability.clear_recovery()?;
     w.replace(
         Project::blank(name.as_deref().unwrap_or("Untitled circuit")),
         None,
@@ -44,6 +47,10 @@ fn new_project(
 fn load_project(path: String, state: State<'_, AppState>) -> Result<WorkspaceSnapshot, String> {
     let path = PathBuf::from(path);
     let loaded = project::load(&path).map_err(|e| e.to_string())?;
+    state.reliability.clear_recovery()?;
+    let _ = state
+        .reliability
+        .remember_project(&path, &loaded.metadata.name);
     let mut w = state
         .workspace
         .lock()
@@ -67,7 +74,68 @@ fn save_project(
     w.project.updated_at = chrono::Utc::now();
     project::save(&resolved, &w.project).map_err(|e| e.to_string())?;
     w.mark_saved(resolved);
+    let saved_path = w.path.as_deref().expect("saved project has a path");
+    let _ = state
+        .reliability
+        .remember_project(saved_path, &w.project.metadata.name);
+    let _ = state.reliability.clear_recovery();
     Ok(w.snapshot())
+}
+
+#[tauri::command]
+fn autosave_project(
+    state: State<'_, AppState>,
+) -> Result<Option<reliability::RecoveryInfo>, String> {
+    let w = state
+        .workspace
+        .lock()
+        .map_err(|_| "Workspace lock was poisoned".to_owned())?;
+    if !w.is_dirty() {
+        return Ok(None);
+    }
+    state
+        .reliability
+        .save_recovery(&w.project, w.path.as_deref())
+        .map(Some)
+}
+
+#[tauri::command]
+fn recovery_status(
+    state: State<'_, AppState>,
+) -> Result<Option<reliability::RecoveryInfo>, String> {
+    state.reliability.recovery_info()
+}
+
+#[tauri::command]
+fn restore_recovery(state: State<'_, AppState>) -> Result<WorkspaceSnapshot, String> {
+    let (project, path) = state
+        .reliability
+        .load_recovery()?
+        .ok_or_else(|| "No recovery snapshot is available".to_owned())?;
+    let mut w = state
+        .workspace
+        .lock()
+        .map_err(|_| "Workspace lock was poisoned".to_owned())?;
+    w.restore(project, path);
+    Ok(w.snapshot())
+}
+
+#[tauri::command]
+fn discard_recovery(state: State<'_, AppState>) -> Result<(), String> {
+    state.reliability.clear_recovery()
+}
+
+#[tauri::command]
+fn recent_projects(state: State<'_, AppState>) -> Result<Vec<reliability::RecentProject>, String> {
+    state.reliability.recent_projects()
+}
+
+#[tauri::command]
+fn forget_recent_project(
+    path: String,
+    state: State<'_, AppState>,
+) -> Result<Vec<reliability::RecentProject>, String> {
+    state.reliability.forget_project(&PathBuf::from(path))
 }
 #[tauri::command]
 fn apply_editor_command(
@@ -109,6 +177,14 @@ fn generate_netlist(state: State<'_, AppState>) -> Result<String, Vec<netlist::N
         }]
     })?;
     netlist::generate(&w.project)
+}
+#[tauri::command]
+fn simulation_check(state: State<'_, AppState>) -> Result<netlist::SimulationCheckReport, String> {
+    let w = state
+        .workspace
+        .lock()
+        .map_err(|_| "Workspace lock was poisoned".to_owned())?;
+    Ok(netlist::check(&w.project))
 }
 #[tauri::command]
 fn import_spice_library(
@@ -179,9 +255,11 @@ pub fn run() {
         .plugin(tauri_plugin_dialog::init())
         .setup(|app| {
             let resource_dir = app.path().resource_dir()?;
+            let app_data_dir = app.path().app_data_dir()?;
             app.manage(AppState {
                 workspace: Mutex::new(Workspace::new(Project::blank("Untitled circuit"))),
                 simulator: NgSpiceBackend::new(simulation::bundled_executable(&resource_dir)),
+                reliability: reliability::ReliabilityStore::new(app_data_dir),
             });
             Ok(())
         })
@@ -190,10 +268,17 @@ pub fn run() {
             new_project,
             load_project,
             save_project,
+            autosave_project,
+            recovery_status,
+            restore_recovery,
+            discard_recovery,
+            recent_projects,
+            forget_recent_project,
             apply_editor_command,
             undo,
             redo,
             generate_netlist,
+            simulation_check,
             import_spice_library,
             export_waveform,
             simulation_status,

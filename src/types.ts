@@ -71,6 +71,25 @@ export type SimulationProfile = {
   analysis: Analysis;
   signals: string[];
 };
+export type SimulationCheckCategory =
+  "ground" | "pins" | "labels" | "probes" | "analysis";
+export type SimulationCheckIssue = {
+  code: string;
+  category: SimulationCheckCategory;
+  message: string;
+  componentId: string | null;
+};
+export type SimulationCheckItem = {
+  category: SimulationCheckCategory;
+  passed: boolean;
+  issueCount: number;
+};
+export type SimulationCheckReport = {
+  ready: boolean;
+  checks: SimulationCheckItem[];
+  issues: SimulationCheckIssue[];
+  netlist: string | null;
+};
 export type Project = {
   schemaVersion: number;
   metadata: { id: string; name: string; description: string; author: string };
@@ -99,6 +118,19 @@ export type Snapshot = {
   dirty: boolean;
   canUndo: boolean;
   canRedo: boolean;
+};
+export type RecoveryInfo = {
+  projectName: string;
+  originalPath: string | null;
+  savedAt: string;
+  componentCount: number;
+  wireCount: number;
+};
+export type RecentProject = {
+  path: string;
+  name: string;
+  lastOpenedAt: string;
+  exists: boolean;
 };
 export type BackendStatus = {
   available: boolean;
@@ -129,6 +161,12 @@ export type EditorCommand =
     }
   | { action: "moveComponent"; id: string; position: Point }
   | {
+      action: "moveSelection";
+      componentIds: string[];
+      wireIds: string[];
+      delta: Point;
+    }
+  | {
       action: "updateComponent";
       id: string;
       displayName: string;
@@ -137,8 +175,12 @@ export type EditorCommand =
     }
   | { action: "rotateComponent"; id: string }
   | { action: "deleteSelection"; componentIds: string[]; wireIds: string[] }
+  | { action: "insertSelection"; components: Component[]; wires: Wire[] }
   | { action: "addWire"; points: Point[] }
   | { action: "updateWire"; id: string; points: Point[] }
   | { action: "deleteWire"; id: string }
   | { action: "updateView"; zoom: number; pan: Point; gridVisible: boolean }
-  | { action: "updateSimulation"; profile: SimulationProfile };
+  | { action: "updateSimulation"; profile: SimulationProfile }
+  | { action: "addSimulationProfile"; profile: SimulationProfile }
+  | { action: "deleteSimulationProfile"; id: string }
+  | { action: "selectSimulationProfile"; id: string };
