@@ -6,12 +6,14 @@ use std::collections::BTreeMap;
 
 const MAX_PIN_MUX_NODES: usize = 4096;
 const MAX_BOOT_STRAP_NODES: usize = 512;
+const MAX_VOLTAGE_SELECTION_NODES: usize = 512;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(super) struct ParsedDeviceTree {
     pub properties: BTreeMap<String, ParsedProperty>,
     pub pin_mux: Vec<ParsedAssignment>,
     pub boot_straps: Vec<ParsedAssignment>,
+    pub voltage_selections: Vec<ParsedAssignment>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -85,8 +87,10 @@ impl Parser {
         let mut properties = BTreeMap::new();
         let mut pin_mux = Vec::new();
         let mut boot_straps = Vec::new();
+        let mut voltage_selections = Vec::new();
         let mut saw_pin_mux = false;
         let mut saw_boot_straps = false;
+        let mut saw_voltage_selections = false;
         while !self.at_symbol(&TokenKind::RightBrace) {
             let (name, line, column) = self.take_word("配置属性或子节点")?;
             if self.at_symbol(&TokenKind::Equals) {
@@ -121,6 +125,17 @@ impl Parser {
                         MAX_BOOT_STRAP_NODES,
                     )?;
                 }
+                "voltage-domains" => {
+                    if saw_voltage_selections {
+                        return Err(duplicate_node("voltage-domains", line, column));
+                    }
+                    saw_voltage_selections = true;
+                    voltage_selections = self.parse_assignment_collection(
+                        "selection",
+                        &["domain", "voltage"],
+                        MAX_VOLTAGE_SELECTION_NODES,
+                    )?;
+                }
                 _ => {
                     return Err(DeviceTreeDiagnostic::error(
                         "device-tree.unknown-node",
@@ -138,6 +153,7 @@ impl Parser {
             properties,
             pin_mux,
             boot_straps,
+            voltage_selections,
         })
     }
 

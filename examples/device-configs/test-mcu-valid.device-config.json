@@ -13,8 +13,10 @@
   "pinMux": [
     { "pinId": "pa0", "function": "UART1_TX" },
     { "pinId": "pa1", "function": "I2C2_SDA" },
+    { "pinId": "pa2", "function": "UART1_RX" },
     { "pinId": "pa4", "function": "SPI1_MOSI" },
     { "pinId": "pa6", "function": "SPI1_SCK" }
   ],
-  "bootStraps": [{ "pinId": "boot0", "value": "pullDown" }]
+  "bootStraps": [{ "pinId": "boot0", "value": "pullDown" }],
+  "voltageSelections": [{ "domainId": "vdd", "voltage": 3.3 }]
 }

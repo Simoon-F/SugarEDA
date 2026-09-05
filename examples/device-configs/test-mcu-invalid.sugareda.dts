@@ -20,5 +20,11 @@
 
     boot-straps {
     };
+
+    voltage-domains {
+      selection@0 { domain = "vdd"; voltage = "5.0"; };
+      selection@1 { domain = "vdd"; voltage = "3.3"; };
+      selection@2 { domain = "missing-domain"; voltage = "1.8"; };
+    };
   };
 };

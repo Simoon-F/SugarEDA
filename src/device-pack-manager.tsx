@@ -200,6 +200,7 @@ export function DevicePackManager({
             );
             const l5Label = [
               configurationScope.available ? "Config" : "",
+              configurationScope.ruleCount > 0 ? "Rules" : "",
               sdkAdapters.length > 0 ? "SDK meta" : "",
             ]
               .filter(Boolean)
@@ -297,6 +298,8 @@ export function DevicePackManager({
                               alternateFunctionCount:
                                 configurationScope.alternateFunctionCount,
                               bootPinCount: configurationScope.bootPinCount,
+                              configurationRuleCount:
+                                configurationScope.ruleCount,
                               instances: deviceConfigCanvasInstances(
                                 project,
                                 pack.sha256,

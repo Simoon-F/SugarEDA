@@ -78,6 +78,7 @@ pub(super) fn configuration_capable(project: &Project, pack_sha256: &str, device
         })
         .is_some_and(|device| {
             !device.alternate_functions.is_empty()
+                || !device.configuration_rules.is_empty()
                 || device
                     .rules
                     .iter()

@@ -15,12 +15,17 @@
     pinmux {
       assignment@0 { pin = "pa0"; function = "UART1_TX"; };
       assignment@1 { pin = "pa1"; function = "I2C2_SDA"; };
-      assignment@2 { pin = "pa4"; function = "SPI1_MOSI"; };
-      assignment@3 { pin = "pa6"; function = "SPI1_SCK"; };
+      assignment@2 { pin = "pa2"; function = "UART1_RX"; };
+      assignment@3 { pin = "pa4"; function = "SPI1_MOSI"; };
+      assignment@4 { pin = "pa6"; function = "SPI1_SCK"; };
     };
 
     boot-straps {
       strap@0 { pin = "boot0"; value = "pull-down"; };
+    };
+
+    voltage-domains {
+      selection@0 { domain = "vdd"; voltage = "3.3"; };
     };
   };
 };

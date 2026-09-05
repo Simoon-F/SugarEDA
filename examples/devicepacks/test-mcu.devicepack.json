@@ -256,7 +256,7 @@
         },
         {
           "pinId": "pa2",
-          "functions": ["GPIO_A2", "TIM3_CH1", "I2C1_SCL"]
+          "functions": ["GPIO_A2", "TIM3_CH1", "I2C1_SCL", "UART1_RX"]
         },
         {
           "pinId": "pa3",
@@ -333,6 +333,41 @@
             "pa11"
           ],
           "message": "Unused GPIO may float"
+        }
+      ],
+      "configurationRules": [
+        {
+          "id": "console-required",
+          "kind": "requiredFunctions",
+          "functions": ["UART1_TX"],
+          "message": "The fictional test board requires a debug console"
+        },
+        {
+          "id": "uart1-complete",
+          "kind": "completeFunctionGroup",
+          "functions": ["UART1_TX", "UART1_RX"],
+          "message": "UART1 requires both transmit and receive signals"
+        },
+        {
+          "id": "spi1-complete",
+          "kind": "completeFunctionGroup",
+          "functions": ["SPI1_MOSI", "SPI1_SCK"]
+        },
+        {
+          "id": "timer-debug-exclusive",
+          "kind": "mutuallyExclusiveFunctions",
+          "functions": ["TIM1_CH1", "UART2_RX"]
+        },
+        {
+          "id": "spi1-clock-dependency",
+          "kind": "functionDependency",
+          "whenAny": ["SPI1_MOSI"],
+          "requireAll": ["SPI1_SCK"]
+        },
+        {
+          "id": "io-voltage-required",
+          "kind": "requiredVoltageDomains",
+          "voltageDomainIds": ["vdd"]
         }
       ],
       "modelIds": [],

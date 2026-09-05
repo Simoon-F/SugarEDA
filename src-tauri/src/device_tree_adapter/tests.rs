@@ -26,9 +26,9 @@ fn translates_valid_subset_into_the_shared_config_checker() {
     .unwrap();
     assert!(report.translated);
     assert!(report.valid);
-    assert_eq!(report.translated_assignments, 5);
-    assert_eq!(report.source_locations.len(), 5);
-    assert_eq!(report.config_report.unwrap().checked_assignments, 5);
+    assert_eq!(report.translated_assignments, 7);
+    assert_eq!(report.source_locations.len(), 7);
+    assert_eq!(report.config_report.unwrap().checked_assignments, 7);
 }
 
 #[test]
@@ -52,6 +52,9 @@ fn preserves_shared_semantic_diagnostic_codes() {
     assert!(codes.contains("device-config.unsupported-function"));
     assert!(codes.contains("device-config.signal-conflict"));
     assert!(codes.contains("device-config.boot-pin-unconfigured"));
+    assert!(codes.contains("device-config.voltage-out-of-range"));
+    assert!(codes.contains("device-config.duplicate-voltage-selection"));
+    assert!(codes.contains("device-config.unknown-voltage-domain"));
 }
 
 #[test]
@@ -94,4 +97,26 @@ fn enforces_input_size_before_lexing() {
         check_bytes(&project, &hash, "stmcu24", "large.sugareda.dts", &bytes),
         Err(DeviceTreeAdapterError::TooLarge)
     ));
+}
+
+#[test]
+fn rejects_non_numeric_voltage_with_a_source_location() {
+    let (project, hash) = project_with_mcu();
+    let source = String::from_utf8(
+        include_bytes!("../../../examples/device-configs/test-mcu-valid.sugareda.dts").to_vec(),
+    )
+    .unwrap()
+    .replace("voltage = \"3.3\"", "voltage = \"not-a-number\"");
+    let report = check_bytes(
+        &project,
+        &hash,
+        "stmcu24",
+        "invalid-voltage.sugareda.dts",
+        source.as_bytes(),
+    )
+    .unwrap();
+    assert!(!report.translated);
+    assert_eq!(report.issues[0].code, "device-tree.invalid-voltage");
+    assert!(report.issues[0].line.is_some());
+    assert!(report.issues[0].column.is_some());
 }

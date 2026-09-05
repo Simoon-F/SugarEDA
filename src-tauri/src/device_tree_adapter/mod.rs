@@ -91,8 +91,9 @@ pub fn check_bytes(
         Ok(converted) => converted,
         Err(issue) => return Ok(failed_report(source_name, issue)),
     };
-    let translated_assignments =
-        converted.config.pin_mux.len() + converted.config.boot_straps.len();
+    let translated_assignments = converted.config.pin_mux.len()
+        + converted.config.boot_straps.len()
+        + converted.config.voltage_selections.len();
     let config_report =
         device_config::check_ir(project, pack_sha256, device_id, &converted.config)?;
     Ok(DeviceTreeAdapterReport {

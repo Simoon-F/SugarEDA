@@ -88,8 +88,13 @@ export function DeviceConfigResult({
               selectedInstanceId,
               issue.pinId,
             );
+            const subjectId = issue.pinId ?? issue.domainId;
             const sourceLines = adapterReport?.sourceLocations
-              .filter((location) => location.pinId === issue.pinId)
+              .filter(
+                (location) =>
+                  location.pinId === issue.pinId &&
+                  location.domainId === issue.domainId,
+              )
               .map((location) => location.line);
             return (
               <article
@@ -98,7 +103,7 @@ export function DeviceConfigResult({
                 <div>
                   <code>{issue.code}</code>
                   <span>
-                    {issue.pinId || "—"}
+                    {subjectId || "—"}
                     {sourceLines?.length
                       ? " · L" + sourceLines.join(", L")
                       : ""}

@@ -28,27 +28,31 @@
     boot-straps {
       strap@0 { pin = "boot0"; value = "pull-down"; };
     };
+
+    voltage-domains {
+      selection@0 { domain = "vddio"; voltage = "3.3"; };
+    };
   };
 };
 ```
 
-`variant-id`、`pinmux` 和 `boot-straps` 可省略。启动值只支持 `low`、`high`、`pull-down`、`pull-up`、`external`。所有其他根节点、子节点和属性都会被拒绝。
+`variant-id`、`pinmux`、`boot-straps` 和 `voltage-domains` 可省略。启动值只支持 `low`、`high`、`pull-down`、`pull-up`、`external`；电压继续使用白名单内的字符串属性，但转换时必须能解析为有限十进制伏特值。所有其他根节点、子节点和属性都会被拒绝。
 
 ## 安全边界
 
 - 文件必须以 `.sugareda.dts` 结尾，最大 1 MiB、最多 50,000 个 token。
-- 最多转换 4,096 个 PinMux 节点和 512 个启动绑带节点。
+- 最多转换 4,096 个 PinMux 节点、512 个启动绑带节点和 512 个电压选择节点。
 - 只支持 UTF-8、字符串值、花括号和固定节点词汇。
 - 明确拒绝 `/include/`、DTS overlay、phandle、标签引用、宏、数值数组、字节数组、任意属性及尾随内容。
 - 允许普通行注释和块注释；字符串只允许 `\"` 和 `\\` 转义。
 - Adapter 不解析 SDK、不访问第二个文件、不执行预处理器或外部命令。
 - 输入绝对路径永不写入 `.sugeda`。用户显式绑定后仅保存转换得到的规范化 IR、来源文件名和 SHA-256，工程 schema 保持 v4。详见 [P3 第六阶段工程内板级配置](p3-phase6-board-configuration.md)。
 
-词法与结构错误使用 `device-tree.*` 稳定 code，并包含行列位置及中英文说明。转换成功后，PinMux 和启动规则仍使用 `device-config.*` code，因此 JSON 和 DTS 输入不会产生两套相互漂移的电气规则。
+词法与结构错误使用 `device-tree.*` 稳定 code，并包含行列位置及中英文说明。转换成功后，PinMux、启动和电压规则仍使用 `device-config.*` code，因此 JSON 和 DTS 输入不会产生两套相互漂移的电气规则。
 
 ## 画布定位
 
-配置检查器会列出当前工程中匹配器件包哈希和器件 ID 的逻辑实例。用户选择实例后，前端定位器按诊断 `pinId` 搜索该实例已放置的 symbol unit：
+配置检查器会列出当前工程中匹配器件包哈希和器件 ID 的逻辑实例。用户选择实例后，前端定位器按诊断 `pinId` 搜索该实例已放置的 symbol unit；电压诊断使用 `domainId` 并保留 `voltage-domains` 源码位置：
 
 - 找到引脚时，“定位单元”会关闭器件包管理器、选择组件并让画布居中。
 - 大型多单元器件会定位到实际承载该引脚的 POWER、GPIO、DDR、USB 等单元，而不是固定选择第一个单元。

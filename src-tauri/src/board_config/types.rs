@@ -2,7 +2,7 @@ use crate::{device_config::DeviceConfig, device_config::DeviceConfigReport};
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub(crate) struct BoardConfiguration {
     pub id: Uuid,

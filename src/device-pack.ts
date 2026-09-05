@@ -37,6 +37,7 @@ export function deviceCapabilities(
       available:
         device.sdkAdapterIds.length > 0 ||
         device.alternateFunctions.length > 0 ||
+        Boolean(device.configurationRules?.length) ||
         device.rules.some((rule) => rule.kind === "bootConfiguration"),
     },
     { level: 6, code: "firmwareSimulation", available: false },

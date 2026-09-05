@@ -101,6 +101,7 @@ describe("logical multi-unit devices", () => {
         },
         pinMux: [],
         bootStraps: [],
+        voltageSelections: [],
       },
     });
     const selected = new Set(

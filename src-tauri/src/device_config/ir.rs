@@ -1,6 +1,6 @@
 use serde::{Deserialize, Serialize};
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub(crate) struct DeviceConfig {
     pub format_version: u32,
@@ -13,6 +13,8 @@ pub(crate) struct DeviceConfig {
     pub pin_mux: Vec<PinMuxAssignment>,
     #[serde(default)]
     pub boot_straps: Vec<BootStrapAssignment>,
+    #[serde(default)]
+    pub voltage_selections: Vec<VoltageSelection>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -46,4 +48,11 @@ pub(crate) enum BootStrapValue {
     PullDown,
     PullUp,
     External,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub(crate) struct VoltageSelection {
+    pub domain_id: String,
+    pub voltage: f64,
 }

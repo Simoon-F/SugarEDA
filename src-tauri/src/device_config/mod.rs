@@ -5,17 +5,23 @@
 //! independent bounded parsers; this module owns the shared semantic rules.
 
 mod checker;
+mod diagnostic;
 mod format;
 mod ir;
+mod pack_rules;
+mod pin_rules;
+mod voltage_rules;
 
 use crate::{device_pack::DeviceDefinition, device_pack::EmbeddedDevicePack, domain::Project};
 use std::{fs, path::Path};
 
-pub use checker::DeviceConfigReport;
+pub(crate) use diagnostic::DeviceConfigIssue;
+pub use diagnostic::DeviceConfigReport;
 pub use format::DeviceConfigError;
 use format::{parse, MAX_CONFIG_BYTES};
 pub(crate) use ir::{
     BootStrapAssignment, BootStrapValue, DeviceConfig, DeviceConfigTarget, PinMuxAssignment,
+    VoltageSelection,
 };
 
 pub fn check_file(

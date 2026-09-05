@@ -4,6 +4,7 @@ use super::{
 };
 use crate::device_config::{
     BootStrapAssignment, BootStrapValue, DeviceConfig, DeviceConfigTarget, PinMuxAssignment,
+    VoltageSelection,
 };
 use serde::Serialize;
 use std::collections::BTreeMap;
@@ -28,7 +29,8 @@ pub(super) struct ConvertedDeviceTree {
 #[derive(Debug, Clone, Serialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
 pub struct DeviceTreeSourceLocation {
-    pub pin_id: String,
+    pub pin_id: Option<String>,
+    pub domain_id: Option<String>,
     pub section: &'static str,
     pub line: usize,
     pub column: usize,
@@ -49,7 +51,9 @@ pub(super) fn convert(
         ));
     }
 
-    let mut locations = Vec::with_capacity(parsed.pin_mux.len() + parsed.boot_straps.len());
+    let mut locations = Vec::with_capacity(
+        parsed.pin_mux.len() + parsed.boot_straps.len() + parsed.voltage_selections.len(),
+    );
     let pin_mux = parsed
         .pin_mux
         .iter()
@@ -57,7 +61,8 @@ pub(super) fn convert(
             let pin = assignment_property(assignment, "pin")?;
             let function = assignment_property(assignment, "function")?;
             locations.push(DeviceTreeSourceLocation {
-                pin_id: pin.value.clone(),
+                pin_id: Some(pin.value.clone()),
+                domain_id: None,
                 section: "pinMux",
                 line: pin.line,
                 column: pin.column,
@@ -68,6 +73,43 @@ pub(super) fn convert(
             })
         })
         .collect::<Result<Vec<_>, DeviceTreeDiagnostic>>()?;
+    let voltage_selections = parsed
+        .voltage_selections
+        .iter()
+        .map(|assignment| {
+            let domain = assignment_property(assignment, "domain")?;
+            let voltage_property = assignment_property(assignment, "voltage")?;
+            let voltage = voltage_property.value.parse::<f64>().map_err(|_| {
+                DeviceTreeDiagnostic::error(
+                    "device-tree.invalid-voltage",
+                    Some(voltage_property.line),
+                    Some(voltage_property.column),
+                    "voltage 必须是以伏特为单位的有限十进制数",
+                    "voltage must be a finite decimal number expressed in volts",
+                )
+            })?;
+            if !voltage.is_finite() {
+                return Err(DeviceTreeDiagnostic::error(
+                    "device-tree.invalid-voltage",
+                    Some(voltage_property.line),
+                    Some(voltage_property.column),
+                    "voltage 必须是以伏特为单位的有限十进制数",
+                    "voltage must be a finite decimal number expressed in volts",
+                ));
+            }
+            locations.push(DeviceTreeSourceLocation {
+                pin_id: None,
+                domain_id: Some(domain.value.clone()),
+                section: "voltageDomain",
+                line: domain.line,
+                column: domain.column,
+            });
+            Ok(VoltageSelection {
+                domain_id: domain.value.clone(),
+                voltage,
+            })
+        })
+        .collect::<Result<Vec<_>, DeviceTreeDiagnostic>>()?;
     let boot_straps = parsed
         .boot_straps
         .iter()
@@ -75,7 +117,8 @@ pub(super) fn convert(
             let pin = assignment_property(assignment, "pin")?;
             let value = assignment_property(assignment, "value")?;
             locations.push(DeviceTreeSourceLocation {
-                pin_id: pin.value.clone(),
+                pin_id: Some(pin.value.clone()),
+                domain_id: None,
                 section: "bootStrap",
                 line: pin.line,
                 column: pin.column,
@@ -105,6 +148,7 @@ pub(super) fn convert(
             },
             pin_mux,
             boot_straps,
+            voltage_selections,
         },
         locations,
     })

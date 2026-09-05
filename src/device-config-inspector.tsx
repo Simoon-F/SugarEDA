@@ -28,6 +28,7 @@ export type DeviceConfigTarget = {
   deviceName: string;
   alternateFunctionCount: number;
   bootPinCount: number;
+  configurationRuleCount: number;
   instances: DeviceConfigCanvasInstance[];
 };
 
@@ -211,6 +212,11 @@ export function DeviceConfigInspector({
               <span>CONFIG IR</span>
               <strong>v1</strong>
               <small>JSON · DTS subset</small>
+            </div>
+            <div>
+              <span>{zh ? "配置规则" : "RULES"}</span>
+              <strong>{target.configurationRuleCount}</strong>
+              <small>{zh ? "器件包声明" : "pack-declared"}</small>
             </div>
           </div>
 

@@ -5,6 +5,9 @@ import type { DevicePack } from "../src/types";
 const device = (
   alternateFunctions: DevicePack["devices"][number]["alternateFunctions"],
   rules: DevicePack["devices"][number]["rules"],
+  configurationRules: NonNullable<
+    DevicePack["devices"][number]["configurationRules"]
+  > = [],
 ): DevicePack["devices"][number] => ({
   id: "test",
   name: "Test",
@@ -17,6 +20,7 @@ const device = (
   alternateFunctions,
   differentialPairs: [],
   rules,
+  configurationRules,
   modelIds: [],
   sdkAdapterIds: [],
 });
@@ -30,6 +34,7 @@ describe("device configuration scope", () => {
       available: true,
       alternateFunctionCount: 1,
       bootPinCount: 0,
+      ruleCount: 0,
     });
   });
 
@@ -56,5 +61,23 @@ describe("device configuration scope", () => {
       device([], [{ id: "power", kind: "powerInput", pinIds: ["vdd"] }]),
     );
     expect(scope.available).toBe(false);
+  });
+
+  it("is available when the pack declares structured configuration rules", () => {
+    const scope = deviceConfigurationScope(
+      device(
+        [],
+        [],
+        [
+          {
+            id: "supply",
+            kind: "requiredVoltageDomains",
+            voltageDomainIds: ["vddio"],
+          },
+        ],
+      ),
+    );
+    expect(scope.available).toBe(true);
+    expect(scope.ruleCount).toBe(1);
   });
 });

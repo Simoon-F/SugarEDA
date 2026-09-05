@@ -42,7 +42,7 @@ DevicePack 是 SugarEDA 的厂商无关、纯数据器件包。文件名使用 `
 
 ### `devices[]`
 
-每个器件包含 `id`、`name`、`deviceType`、`symbolId`、`packageId`、`variants`、`pins`、`voltageDomains`、`alternateFunctions`、`differentialPairs`、`rules`、`modelIds`、可选 `spiceBindings` 和 `sdkAdapterIds`。
+每个器件包含 `id`、`name`、`deviceType`、`symbolId`、`packageId`、`variants`、`pins`、`voltageDomains`、`alternateFunctions`、`differentialPairs`、`rules`、可选 `configurationRules`、`modelIds`、`spiceBindings` 和 `sdkAdapterIds`。
 
 - 引脚包含稳定 `id`、物理 `number`、可见 `name`、`group`、`electricalType`、`direction` 和可选 `voltageDomainId`。
 - `electricalType`：`passive`、`input`、`output`、`bidirectional`、`openDrain`、`openCollector`、`powerInput`、`powerOutput`、`noConnect`。
@@ -51,6 +51,39 @@ DevicePack 是 SugarEDA 的厂商无关、纯数据器件包。文件名使用 `
 - 复用功能把一个 `pinId` 映射到 GPIO、UART、SPI、I2C 等名称；受限 `.device-config.json` 可以引用这些名称做一致性检查，但不会解析 SDK。
 - 差分对包含 `id`、`positivePinId`、`negativePinId`。
 - 规则包含 `id`、`kind`、`pinIds` 和可选 `message`。`kind` 为 `required`、`allowFloating`、`powerInput`、`powerOutput`、`bootConfiguration`。
+
+### `configurationRules[]`
+
+L5 配置规则只引用当前器件已经声明的复用功能或电压域，不根据 UART、SPI 等名称做硬编码推断：
+
+```json
+[
+  {
+    "id": "uart1-complete",
+    "kind": "completeFunctionGroup",
+    "functions": ["UART1_TX", "UART1_RX"]
+  },
+  {
+    "id": "spi-clock",
+    "kind": "functionDependency",
+    "whenAny": ["SPI1_MOSI"],
+    "requireAll": ["SPI1_SCK"]
+  },
+  {
+    "id": "io-voltage",
+    "kind": "requiredVoltageDomains",
+    "voltageDomainIds": ["vddio"]
+  }
+]
+```
+
+- `requiredFunctions`：无条件要求列出的全部功能。
+- `completeFunctionGroup`：组内任意功能启用后，要求组内全部功能。
+- `mutuallyExclusiveFunctions`：列出的功能最多选择一个。
+- `functionDependency`：`whenAny` 任一功能启用时，要求 `requireAll` 全部存在。
+- `requiredVoltageDomains`：要求板级配置为列出的电压域选择工作电压。
+
+每个器件最多 256 条配置规则，每个列表最多 64 项。规则 ID 必须唯一，函数和电压域必须解析到本器件元数据，否则整个 DevicePack 被拒绝。
 
 ### `symbols[]` 与大型器件
 
@@ -96,7 +129,7 @@ SDK Adapter 包含 `id`、`sdkType`、`versionRequirement`、安全的相对 `lo
 
 用户可以在器件包管理器中显式选择一个本地 SDK 根目录进行只读结构匹配。匹配器只支持作为完整路径段的 `*` 和受限文件后缀形式 `*.ext`，限制最多访问 10,000 个目录项、每个模式返回 128 个结果，并忽略逃出所选根目录的符号链接。它不读取 SDK 文件内容、不执行工具、不推断版本，也不把本地绝对路径写入 `.sugeda`。结果中的 `pathMetadataOnly` 仅表示目录结构与元数据模式匹配，不能描述为 SDK 兼容或 Device Tree 配置已经验证。
 
-具有 `alternateFunctions` 或 `bootConfiguration` 规则的器件还可以检查厂商无关的 `.device-config.json`。该受限 IR 绑定精确器件包版本，只包含 PinMux 和启动绑带声明；Rust 会验证引脚、可选功能、重复外设信号及启动配置覆盖。通过结构与绑定验证后，规范化 IR 可随 schema v4 工程保存，但原始本地路径不会持久化。详见 [P3 第四阶段器件配置检查](p3-phase4-device-configuration.md)。
+具有 `alternateFunctions`、`configurationRules` 或 `bootConfiguration` 规则的器件还可以检查厂商无关的 `.device-config.json`。该受限 IR 绑定精确器件包版本，包含 PinMux、启动绑带和电压域选择；Rust 会验证引脚、功能组、依赖、互斥、电压范围及启动配置覆盖。通过结构与绑定验证后，规范化 IR 可随 schema v4 工程保存，但原始本地路径不会持久化。详见 [P3 第四阶段器件配置检查](p3-phase4-device-configuration.md)。
 
 独立 `.sugareda.dts` Adapter 可以把固定白名单语法转换到同一配置 IR，并保留引脚声明的源码行列。它拒绝 include、phandle、overlay、宏和任意节点，不是通用 Device Tree 兼容声明。诊断可进一步定位到所选逻辑器件实例中实际承载该引脚的 symbol unit。详见 [P3 第五阶段 Device Tree Adapter](p3-phase5-device-tree-adapter.md)。
 

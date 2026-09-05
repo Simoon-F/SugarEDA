@@ -6,6 +6,7 @@ export type DeviceConfigurationScope = {
   available: boolean;
   alternateFunctionCount: number;
   bootPinCount: number;
+  ruleCount: number;
 };
 
 /** Derives L5 configuration-check scope from DevicePack data only. */
@@ -18,9 +19,11 @@ export function deviceConfigurationScope(
       .flatMap((rule) => rule.pinIds),
   ).size;
   const alternateFunctionCount = device.alternateFunctions.length;
+  const ruleCount = device.configurationRules?.length ?? 0;
   return {
-    available: alternateFunctionCount > 0 || bootPinCount > 0,
+    available: alternateFunctionCount > 0 || bootPinCount > 0 || ruleCount > 0,
     alternateFunctionCount,
     bootPinCount,
+    ruleCount,
   };
 }

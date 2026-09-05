@@ -1,5 +1,6 @@
 use super::{
     BootStrapAssignment, BootStrapValue, DeviceConfig, DeviceConfigTarget, PinMuxAssignment,
+    VoltageSelection,
 };
 use serde::Deserialize;
 use thiserror::Error;
@@ -11,6 +12,7 @@ const MAX_NAME_LENGTH: usize = 256;
 const MAX_TEXT_LENGTH: usize = 512;
 const MAX_PIN_MUX_ASSIGNMENTS: usize = 4096;
 const MAX_BOOT_STRAPS: usize = 512;
+const MAX_VOLTAGE_SELECTIONS: usize = 512;
 
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
@@ -25,6 +27,8 @@ struct JsonDeviceConfig {
     pin_mux: Vec<JsonPinMuxAssignment>,
     #[serde(default)]
     boot_straps: Vec<JsonBootStrapAssignment>,
+    #[serde(default)]
+    voltage_selections: Vec<JsonVoltageSelection>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -49,6 +53,13 @@ struct JsonPinMuxAssignment {
 struct JsonBootStrapAssignment {
     pin_id: String,
     value: JsonBootStrapValue,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+struct JsonVoltageSelection {
+    domain_id: String,
+    voltage: f64,
 }
 
 #[derive(Debug, Deserialize)]
@@ -127,6 +138,14 @@ fn into_ir(source: JsonDeviceConfig) -> DeviceConfig {
                 },
             })
             .collect(),
+        voltage_selections: source
+            .voltage_selections
+            .into_iter()
+            .map(|selection| VoltageSelection {
+                domain_id: selection.domain_id,
+                voltage: selection.voltage,
+            })
+            .collect(),
     }
 }
 
@@ -162,12 +181,27 @@ pub(crate) fn validate(config: &DeviceConfig) -> Result<(), DeviceConfigError> {
             format!("Boot strap count exceeds {MAX_BOOT_STRAPS}"),
         ));
     }
+    if config.voltage_selections.len() > MAX_VOLTAGE_SELECTIONS {
+        return Err(DeviceConfigError::invalid(
+            "device-config.too-many-voltage-selections",
+            format!("Voltage selection count exceeds {MAX_VOLTAGE_SELECTIONS}"),
+        ));
+    }
     for assignment in &config.pin_mux {
         validate_identifier("PinMux pin id", &assignment.pin_id)?;
         validate_identifier("PinMux function", &assignment.function)?;
     }
     for strap in &config.boot_straps {
         validate_identifier("boot strap pin id", &strap.pin_id)?;
+    }
+    for selection in &config.voltage_selections {
+        validate_identifier("voltage domain id", &selection.domain_id)?;
+        if !selection.voltage.is_finite() || !(0.0..=100_000.0).contains(&selection.voltage) {
+            return Err(DeviceConfigError::invalid(
+                "device-config.invalid-voltage",
+                "Selected voltage must be a finite value between 0 and 100000 volts",
+            ));
+        }
     }
     Ok(())
 }

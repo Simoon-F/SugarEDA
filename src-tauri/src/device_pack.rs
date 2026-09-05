@@ -4,6 +4,10 @@
 //! script, executable, external model path, or implicit network dependency is
 //! accepted here.
 
+mod configuration_rules;
+
+pub use configuration_rules::DeviceConfigurationRule;
+
 use crate::domain::{
     DeviceBinding, ModelBinding, Pin, PinElectricalType, Point, Project, SpiceLibrary,
 };
@@ -76,6 +80,9 @@ pub struct DeviceDefinition {
     pub differential_pairs: Vec<DifferentialPair>,
     #[serde(default)]
     pub rules: Vec<DeviceRule>,
+    /// Vendor-neutral constraints consumed by the L5 configuration checker.
+    #[serde(default)]
+    pub configuration_rules: Vec<DeviceConfigurationRule>,
     #[serde(default)]
     pub model_ids: Vec<String>,
     /// Explicit SPICE model-port to logical device-pin mappings.
@@ -602,6 +609,7 @@ pub fn validate(pack: &DevicePack) -> Result<(), DevicePackError> {
                 ));
             }
         }
+        configuration_rules::validate(device)?;
         if device
             .model_ids
             .iter()
@@ -784,6 +792,7 @@ pub fn capabilities(pack: &DevicePack, device: &DeviceDefinition) -> Vec<DeviceP
             code: "deviceConfiguration".into(),
             available: !device.sdk_adapter_ids.is_empty()
                 || !device.alternate_functions.is_empty()
+                || !device.configuration_rules.is_empty()
                 || device
                     .rules
                     .iter()
@@ -1081,6 +1090,45 @@ mod tests {
             validate(&pack),
             Err(DevicePackError::Invalid {
                 code: "invalid_spice_binding",
+                ..
+            })
+        ));
+    }
+
+    #[test]
+    fn rejects_configuration_rules_with_unknown_functions_or_domains() {
+        let mut pack: DevicePack = serde_json::from_slice(include_bytes!(
+            "../../examples/devicepacks/test-mcu.devicepack.json"
+        ))
+        .unwrap();
+        pack.devices[0]
+            .configuration_rules
+            .push(DeviceConfigurationRule::FunctionDependency {
+                id: "invalid-dependency".into(),
+                when_any: vec!["DOES_NOT_EXIST".into()],
+                require_all: vec!["UART1_TX".into()],
+                message: String::new(),
+            });
+        assert!(matches!(
+            validate(&pack),
+            Err(DevicePackError::Invalid {
+                code: "invalid_configuration_rule",
+                ..
+            })
+        ));
+
+        pack.devices[0].configuration_rules.pop();
+        pack.devices[0]
+            .configuration_rules
+            .push(DeviceConfigurationRule::RequiredVoltageDomains {
+                id: "invalid-voltage-domain".into(),
+                voltage_domain_ids: vec!["missing".into()],
+                message: String::new(),
+            });
+        assert!(matches!(
+            validate(&pack),
+            Err(DevicePackError::Invalid {
+                code: "invalid_configuration_rule",
                 ..
             })
         ));

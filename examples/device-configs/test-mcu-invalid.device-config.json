@@ -16,5 +16,10 @@
     { "pinId": "pa1", "function": "SPI9_MISO" },
     { "pinId": "px99", "function": "GPIO_X99" }
   ],
-  "bootStraps": []
+  "bootStraps": [],
+  "voltageSelections": [
+    { "domainId": "vdd", "voltage": 5.0 },
+    { "domainId": "vdd", "voltage": 3.3 },
+    { "domainId": "missing-domain", "voltage": 1.8 }
+  ]
 }

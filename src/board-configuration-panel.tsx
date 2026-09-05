@@ -166,7 +166,7 @@ export function BoardConfigurationPanel({
                 >
                   <code>{issue.code}</code>
                   <span>{zh ? issue.messageZh : issue.messageEn}</span>
-                  <em>{issue.pinId ?? "—"}</em>
+                  <em>{issue.pinId ?? issue.domainId ?? "—"}</em>
                   <Crosshair />
                 </button>
               ))}

@@ -153,6 +153,30 @@ export type DevicePack = {
       negativePinId: string;
     }[];
     rules: { id: string; kind: string; pinIds: string[]; message?: string }[];
+    configurationRules?: (
+      | {
+          id: string;
+          kind:
+            | "requiredFunctions"
+            | "completeFunctionGroup"
+            | "mutuallyExclusiveFunctions";
+          functions: string[];
+          message?: string;
+        }
+      | {
+          id: string;
+          kind: "functionDependency";
+          whenAny: string[];
+          requireAll: string[];
+          message?: string;
+        }
+      | {
+          id: string;
+          kind: "requiredVoltageDomains";
+          voltageDomainIds: string[];
+          message?: string;
+        }
+    )[];
     modelIds: string[];
     spiceBindings?: {
       modelId: string;
@@ -224,6 +248,7 @@ export type DeviceConfigIssue = {
   code: string;
   severity: "error" | "warning" | "info";
   pinId?: string | null;
+  domainId?: string | null;
   messageZh: string;
   messageEn: string;
 };
@@ -253,8 +278,9 @@ export type DeviceTreeAdapterReport = {
   translatedAssignments: number;
   configReport?: DeviceConfigReport | null;
   sourceLocations: {
-    pinId: string;
-    section: "pinMux" | "bootStrap";
+    pinId?: string | null;
+    domainId?: string | null;
+    section: "pinMux" | "bootStrap" | "voltageDomain";
     line: number;
     column: number;
   }[];
@@ -277,6 +303,7 @@ export type DeviceConfigurationData = {
     pinId: string;
     value: "low" | "high" | "pullDown" | "pullUp" | "external";
   }[];
+  voltageSelections: { domainId: string; voltage: number }[];
 };
 export type BoardConfigurationSourceFormat = "json" | "deviceTreeSubset";
 export type BoardConfiguration = {
