@@ -17,6 +17,8 @@
 - 动态器件库与多单元分组符号，支持小型器件和大型 BGA。
 - ERC 覆盖必接/电源引脚、输出冲突、电压域、差分对和显式 No Connect。
 - L1/L2 数据基础、受限内嵌 SPICE L3，以及 IBIS/S 参数和 SDK Adapter 的 L4/L5 元数据接口。
+- 厂商无关配置 JSON 与受限 DTS 子集可绑定到逻辑器件，规范化后随 schema v4 工程保存，并做项目级 PinMux/启动配置检查与画布定位。
+- 未使用的器件包可从工程安全移除；仍被实例引用时拒绝，操作支持撤销。
 - 三个 CC0 虚构测试包：模拟器件、带 PinMux 的 MCU、144 球多电源域 SoC。
 
 ### 原理图编辑
@@ -151,6 +153,9 @@ npm run test:desktop
 src/                         React 工作台、Canvas 原理图和波形界面
 src-tauri/src/application.rs Rust 编辑命令、Undo/Redo 与工作区状态
 src-tauri/src/project.rs     项目校验和原子保存
+src-tauri/src/board_config/  板级配置来源、验证、持久化和项目级检查
+src-tauri/src/device_config/ 厂商无关配置 IR 与语义规则
+src-tauri/src/device_tree_adapter/ 受限 DTS 子集解析与 IR 转换
 src-tauri/src/reliability.rs 自动恢复与最近项目
 src-tauri/src/netlist.rs     电气检查和确定性 SPICE 网表
 src-tauri/src/simulation.rs  ngspice 进程、取消和结果解析
@@ -161,6 +166,7 @@ scripts/desktop-smoke.mjs    真实桌面 WebDriver 冒烟测试
 ## 当前边界
 
 - 当前一次编辑一张原理图。
+- L5 当前只接受 SugarEDA 配置 JSON 与独立 DTS 子集；不解析通用 DTS、厂商 SDK 或 Device Tree include。
 - 波形数据仍通过 Tauri JSON 命令边界传输；后续可替换为通道或二进制结果文件。
 - Windows/macOS 已配置桌面打包；Linux 主要用于自动化测试，发布包仍需单独验证。
 - 外部 `.include`、任意引脚映射、IBIS、加密厂商模型和自动下载尚未实现。

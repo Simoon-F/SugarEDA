@@ -32,6 +32,7 @@ export function createBlankSnapshot(name = "Untitled circuit"): Snapshot {
     spiceLibraries: [],
     devicePacks: [],
     deviceInstances: [],
+    boardConfigurations: [],
     activeSimulationProfile: profileId,
     uiViewState: {
       activeSheetId: sheetId,

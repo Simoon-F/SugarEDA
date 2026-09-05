@@ -20,6 +20,9 @@ pub struct Project {
     /// Logical parts shared by one or more independently placed symbol units.
     #[serde(default)]
     pub device_instances: Vec<DeviceInstance>,
+    /// Canonical, path-independent L5 configurations bound to logical devices.
+    #[serde(default)]
+    pub board_configurations: Vec<crate::board_config::BoardConfiguration>,
     pub active_simulation_profile: Option<Uuid>,
     pub ui_view_state: UiViewState,
     pub created_at: DateTime<Utc>,
@@ -315,6 +318,7 @@ impl Project {
             spice_libraries: vec![],
             device_packs: vec![],
             device_instances: vec![],
+            board_configurations: vec![],
             active_simulation_profile: Some(profile_id),
             ui_view_state: UiViewState {
                 active_sheet_id: sheet_id,

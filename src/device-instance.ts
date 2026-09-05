@@ -39,4 +39,7 @@ export function removeOrphanDeviceInstances(project: Project) {
   project.deviceInstances = project.deviceInstances.filter((instance) =>
     used.has(instance.id),
   );
+  project.boardConfigurations = project.boardConfigurations.filter(
+    (configuration) => used.has(configuration.logicalInstanceId),
+  );
 }

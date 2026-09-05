@@ -56,6 +56,7 @@ function largeProject(): Project {
     spiceLibraries: [],
     devicePacks: [],
     deviceInstances: [],
+    boardConfigurations: [],
     activeSimulationProfile: null,
     uiViewState: {
       activeSheetId: "main",

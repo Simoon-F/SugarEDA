@@ -19,6 +19,11 @@ pub use diagnostic::DeviceTreeDiagnostic;
 
 const MAX_DEVICE_TREE_BYTES: u64 = 1024 * 1024;
 
+pub(crate) struct DeviceTreeTranslation {
+    pub config: device_config::DeviceConfig,
+    pub source_locations: Vec<DeviceTreeSourceLocation>,
+}
+
 #[derive(Debug, Clone, Serialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
 pub struct DeviceTreeAdapterReport {
@@ -82,15 +87,7 @@ pub fn check_bytes(
     if bytes.len() as u64 > MAX_DEVICE_TREE_BYTES {
         return Err(DeviceTreeAdapterError::TooLarge);
     }
-    let tokens = match lexer::lex(bytes) {
-        Ok(tokens) => tokens,
-        Err(issue) => return Ok(failed_report(source_name, issue)),
-    };
-    let parsed = match parser::parse(tokens) {
-        Ok(parsed) => parsed,
-        Err(issue) => return Ok(failed_report(source_name, issue)),
-    };
-    let converted = match converter::convert(parsed) {
+    let converted = match translate_ir(bytes) {
         Ok(converted) => converted,
         Err(issue) => return Ok(failed_report(source_name, issue)),
     };
@@ -105,8 +102,18 @@ pub fn check_bytes(
         valid: config_report.valid,
         translated_assignments,
         config_report: Some(config_report),
-        source_locations: converted.locations,
+        source_locations: converted.source_locations,
         issues: Vec::new(),
+    })
+}
+
+pub(crate) fn translate_ir(bytes: &[u8]) -> Result<DeviceTreeTranslation, DeviceTreeDiagnostic> {
+    let tokens = lexer::lex(bytes)?;
+    let parsed = parser::parse(tokens)?;
+    let converted = converter::convert(parsed)?;
+    Ok(DeviceTreeTranslation {
+        config: converted.config,
+        source_locations: converted.locations,
     })
 }
 

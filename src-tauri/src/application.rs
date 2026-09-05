@@ -81,6 +81,8 @@ pub enum EditorCommand {
         components: Vec<Component>,
         wires: Vec<Wire>,
         device_instances: Vec<DeviceInstance>,
+        #[serde(default)]
+        board_configurations: Vec<crate::board_config::BoardConfiguration>,
     },
     AddWire {
         points: Vec<Point>,
@@ -108,6 +110,12 @@ pub enum EditorCommand {
     },
     SelectSimulationProfile {
         id: Uuid,
+    },
+    RemoveBoardConfiguration {
+        id: Uuid,
+    },
+    RemoveDevicePack {
+        pack_sha256: String,
     },
 }
 
@@ -421,6 +429,7 @@ impl Workspace {
                 components,
                 wires,
                 device_instances,
+                board_configurations,
             } => {
                 let sheet = &mut self.project.sheets[0];
                 let mut ids: HashSet<_> = sheet
@@ -493,9 +502,11 @@ impl Workspace {
                 }
                 let mut candidate = self.project.clone();
                 candidate.device_instances.extend(device_instances);
+                candidate.board_configurations.extend(board_configurations);
                 candidate.sheets[0].components.extend(components);
                 candidate.sheets[0].wires.extend(wires);
                 crate::device_instance::validate(&candidate)?;
+                crate::board_config::validate_project(&candidate)?;
                 self.project = candidate;
             }
             EditorCommand::AddWire { points } => {
@@ -569,6 +580,39 @@ impl Workspace {
                     return Err(format!("Simulation profile {id} no longer exists"));
                 }
                 self.project.active_simulation_profile = Some(id);
+            }
+            EditorCommand::RemoveBoardConfiguration { id } => {
+                if !self
+                    .project
+                    .board_configurations
+                    .iter()
+                    .any(|configuration| configuration.id == id)
+                {
+                    return Err(format!("Board configuration {id} no longer exists"));
+                }
+                self.project
+                    .board_configurations
+                    .retain(|configuration| configuration.id != id);
+            }
+            EditorCommand::RemoveDevicePack { pack_sha256 } => {
+                if self
+                    .project
+                    .device_instances
+                    .iter()
+                    .any(|instance| instance.pack_sha256 == pack_sha256)
+                {
+                    return Err(
+                        "Device pack is still used by logical device instances; remove those devices first"
+                            .into(),
+                    );
+                }
+                let previous_len = self.project.device_packs.len();
+                self.project
+                    .device_packs
+                    .retain(|pack| pack.sha256 != pack_sha256);
+                if self.project.device_packs.len() == previous_len {
+                    return Err("Device pack no longer exists".into());
+                }
             }
         }
         self.project.updated_at = Utc::now();
@@ -664,6 +708,33 @@ impl Workspace {
             }
         }
         self.project.device_packs.push(pack);
+        self.project.updated_at = Utc::now();
+        self.undo.push(before);
+        if self.undo.len() > 100 {
+            self.undo.remove(0);
+        }
+        self.redo.clear();
+        self.dirty = true;
+        Ok(())
+    }
+
+    pub fn upsert_board_configuration(
+        &mut self,
+        mut configuration: crate::board_config::BoardConfiguration,
+    ) -> Result<(), String> {
+        crate::board_config::validate_project_candidate(&self.project, &configuration)?;
+        let before = self.project.clone();
+        if let Some(existing) = self
+            .project
+            .board_configurations
+            .iter_mut()
+            .find(|existing| existing.logical_instance_id == configuration.logical_instance_id)
+        {
+            configuration.id = existing.id;
+            *existing = configuration;
+        } else {
+            self.project.board_configurations.push(configuration);
+        }
         self.project.updated_at = Utc::now();
         self.undo.push(before);
         if self.undo.len() > 100 {
@@ -875,6 +946,40 @@ mod tests {
     }
 
     #[test]
+    fn device_pack_removal_is_safe_and_undoable() {
+        let pack = crate::device_pack::import_bytes(include_bytes!(
+            "../../examples/devicepacks/test-mcu.devicepack.json"
+        ))
+        .unwrap();
+        let hash = pack.sha256.clone();
+        let mut workspace = Workspace::new(Project::blank("packs"));
+        workspace.add_device_pack(pack, vec![]).unwrap();
+        workspace
+            .apply(EditorCommand::RemoveDevicePack {
+                pack_sha256: hash.clone(),
+            })
+            .unwrap();
+        assert!(workspace.project.device_packs.is_empty());
+        assert!(workspace.undo());
+        assert_eq!(workspace.project.device_packs.len(), 1);
+
+        workspace
+            .apply(EditorCommand::AddDeviceComponent {
+                pack_sha256: hash.clone(),
+                device_id: "stmcu24".into(),
+                variant_id: None,
+                unit_id: Some("core".into()),
+                logical_instance_id: None,
+                position: Point { x: 100.0, y: 100.0 },
+            })
+            .unwrap();
+        assert!(workspace
+            .apply(EditorCommand::RemoveDevicePack { pack_sha256: hash })
+            .is_err());
+        assert_eq!(workspace.project.device_packs.len(), 1);
+    }
+
+    #[test]
     fn wire_edits_keep_the_id_and_are_undoable() {
         let mut w = Workspace::new(Project::blank("x"));
         w.apply(EditorCommand::AddWire {
@@ -970,6 +1075,7 @@ mod tests {
                 points: vec![Point { x: 80., y: 120. }, Point { x: 20., y: 120. }],
             }],
             device_instances: vec![],
+            board_configurations: vec![],
         })
         .unwrap();
         assert_eq!(w.project.sheets[0].components[0].id, copied_id);

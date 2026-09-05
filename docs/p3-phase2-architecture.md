@@ -11,6 +11,7 @@
 - `device_instance.rs`：独占逻辑实例的创建、复用、迁移、身份更新、孤儿清理和跨实体一致性验证。
 - `simulation_binding.rs`：独占模型端口解析和跨 unit 引脚聚合，不负责电气网络求解。
 - `sdk_adapter.rs`：独占用户所选 SDK 根目录的受限、只读路径匹配，不读取源码或执行 SDK。
+- `board_config/*`：独占规范化 L5 配置的来源读取、持久化验证和项目级检查；解析器按输入格式分离。
 - `netlist.rs`：只负责电气网络与后端网表输出，消费已解析的仿真绑定。
 - `application.rs`：只编排编辑命令和撤销事务，不复制器件规则。
 - `project.rs`：只编排工程读写、版本迁移和各领域验证器。
@@ -24,6 +25,7 @@
 - `device-unit-actions.tsx`：只负责新实例/已有实例和 unit 可用性的交互。
 - `component-library.ts`：只派生侧栏库视图。
 - `selection-clipboard.ts`：只负责选择集及共享实例的事务式克隆。
+- `board-configuration-panel.tsx`：只展示工程配置状态和发出定位/移除动作。
 
 `app.tsx` 仍是工作区组合根，但不再包含 DevicePack unit 生成、共享实例查询、器件库派生或复制克隆算法。后续功能应继续按上述领域入口扩展，禁止把 SDK Adapter、IBIS 或 Device Tree 的实现塞回组合根。
 

@@ -57,3 +57,22 @@ export function locateDeviceConfigIssue(
   }
   return instance.units[0]?.componentId ?? null;
 }
+
+export function locateProjectBoardConfigurationIssue(
+  project: Project,
+  logicalInstanceId: string,
+  pinId?: string | null,
+): string | null {
+  const units = project.sheets.flatMap((sheet) =>
+    sheet.components.filter(
+      (component) => component.device?.logicalInstanceId === logicalInstanceId,
+    ),
+  );
+  if (pinId) {
+    return (
+      units.find((component) => component.pins.some((pin) => pin.id === pinId))
+        ?.id ?? null
+    );
+  }
+  return units[0]?.id ?? null;
+}

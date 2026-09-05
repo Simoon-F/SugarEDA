@@ -1,8 +1,8 @@
 //! Vendor-neutral L5 device configuration validation.
 //!
-//! SDK and Device Tree integrations can translate into this restricted IR in
-//! future stages. This module only reads bounded declarative JSON and validates
-//! it against the DevicePack embedded in the current project.
+//! SDK-specific integrations may translate into this restricted IR in future
+//! stages. The current JSON reader and Device Tree subset adapter remain
+//! independent bounded parsers; this module owns the shared semantic rules.
 
 mod checker;
 mod format;
@@ -53,6 +53,14 @@ pub fn check_bytes(
 ) -> Result<DeviceConfigReport, DeviceConfigError> {
     let config = parse(bytes)?;
     check_ir(project, pack_sha256, device_id, &config)
+}
+
+pub(crate) fn parse_ir(bytes: &[u8]) -> Result<DeviceConfig, DeviceConfigError> {
+    parse(bytes)
+}
+
+pub(crate) fn validate_ir(config: &DeviceConfig) -> Result<(), DeviceConfigError> {
+    format::validate(config)
 }
 
 pub(crate) fn check_ir(

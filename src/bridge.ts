@@ -11,6 +11,8 @@ import type {
   DeviceConfigReport,
   DeviceTreeAdapterReport,
   SdkAdapterReport,
+  BoardConfigurationCheckReport,
+  BoardConfigurationSourceFormat,
 } from "./types";
 export const isDesktop = () => "__TAURI_INTERNALS__" in window;
 export const api = {
@@ -60,6 +62,18 @@ export const api = {
       deviceId,
       path,
     }),
+  importBoardConfiguration: (
+    logicalInstanceId: string,
+    path: string,
+    sourceFormat: BoardConfigurationSourceFormat,
+  ) =>
+    invoke<Snapshot>("import_board_configuration", {
+      logicalInstanceId,
+      path,
+      sourceFormat,
+    }),
+  checkBoardConfigurations: () =>
+    invoke<BoardConfigurationCheckReport>("check_board_configurations"),
   exportWaveform: (path: string, csv: string) =>
     invoke<void>("export_waveform", { path, csv }),
   status: (configuredPath?: string) =>

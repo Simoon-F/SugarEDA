@@ -105,6 +105,9 @@ pub fn remove_orphans(project: &mut Project) {
     project
         .device_instances
         .retain(|instance| used.contains(&instance.id));
+    project
+        .board_configurations
+        .retain(|configuration| used.contains(&configuration.logical_instance_id));
 }
 
 pub fn update_identity(

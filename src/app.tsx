@@ -11,6 +11,8 @@ import { SimulationCheckPanel } from "./simulation-check-panel";
 import { RecoveryDialog, UnsavedChangesDialog } from "./reliability-dialogs";
 import { DevicePackManager } from "./device-pack-manager";
 import { ErcPanel } from "./erc-panel";
+import { BoardConfigurationPanel } from "./board-configuration-panel";
+import { locateProjectBoardConfigurationIssue } from "./device-config-location";
 import { placeLocalDeviceUnit } from "./device-unit-factory";
 import { removeOrphanDeviceInstances } from "./device-instance";
 import { buildVisibleLibrary, type LibraryGroup } from "./component-library";
@@ -73,6 +75,7 @@ import type {
   Snapshot,
   Wire,
   ErcReport,
+  BoardConfigurationCheckReport,
 } from "./types";
 
 type PendingTransition = {
@@ -283,6 +286,10 @@ function App() {
   const [checking, setChecking] = useState(false);
   const [ercReport, setErcReport] = useState<ErcReport | null>(null);
   const [ercChecking, setErcChecking] = useState(false);
+  const [boardConfigurationReport, setBoardConfigurationReport] =
+    useState<BoardConfigurationCheckReport | null>(null);
+  const [boardConfigurationChecking, setBoardConfigurationChecking] =
+    useState(false);
   const [packManagerOpen, setPackManagerOpen] = useState(false);
   const [focusRequest, setFocusRequest] = useState<{
     componentId: string;
@@ -485,8 +492,24 @@ function App() {
         removeOrphanDeviceInstances(next.project);
       } else if (command.action === "insertSelection") {
         next.project.deviceInstances.push(...command.deviceInstances);
+        next.project.boardConfigurations.push(...command.boardConfigurations);
         next.project.sheets[0].components.push(...command.components);
         next.project.sheets[0].wires.push(...command.wires);
+      } else if (command.action === "removeBoardConfiguration") {
+        next.project.boardConfigurations =
+          next.project.boardConfigurations.filter(
+            (configuration) => configuration.id !== command.id,
+          );
+      } else if (command.action === "removeDevicePack") {
+        if (
+          next.project.deviceInstances.some(
+            (instance) => instance.packSha256 === command.packSha256,
+          )
+        )
+          return current;
+        next.project.devicePacks = next.project.devicePacks.filter(
+          (pack) => pack.sha256 !== command.packSha256,
+        );
       } else if (command.action === "addWire")
         next.project.sheets[0].wires.push({
           id: crypto.randomUUID(),
@@ -644,6 +667,7 @@ function App() {
       if (c.action !== "updateView") {
         setCheckReport(null);
         setErcReport(null);
+        setBoardConfigurationReport(null);
       }
       const task = pendingEdits.current.then(async () => {
         try {
@@ -713,6 +737,7 @@ function App() {
         components: inserted.components,
         wires: inserted.wires,
         deviceInstances: inserted.deviceInstances,
+        boardConfigurations: inserted.boardConfigurations,
       });
       setSelected([
         ...inserted.components.map((component) => component.id),
@@ -748,6 +773,8 @@ function App() {
     setSelected([]);
     setResult(null);
     setCheckReport(null);
+    setErcReport(null);
+    setBoardConfigurationReport(null);
     setAutosaveState("idle");
     setAutosavedAt(null);
   };
@@ -1013,6 +1040,29 @@ function App() {
       setErcChecking(false);
     }
   };
+  const checkBoardConfigurations = async () => {
+    setBottomOpen(true);
+    setBottomTab("Board Config");
+    setBoardConfigurationChecking(true);
+    try {
+      await pendingEdits.current;
+      if (!isDesktop()) {
+        throw new Error(
+          language === "zh-CN"
+            ? "板级配置检查仅在 Tauri 桌面应用中可用"
+            : "Board configuration checking is available in the Tauri desktop app only",
+        );
+      }
+      setBoardConfigurationReport(await api.checkBoardConfigurations());
+    } catch (error) {
+      setLogs((lines) => [
+        ...lines,
+        `BOARD CONFIG ERROR ${errorText(error, language)}`,
+      ]);
+    } finally {
+      setBoardConfigurationChecking(false);
+    }
+  };
   const inspectNetlist = async () => {
     setBottomOpen(true);
     setBottomTab("Netlist");
@@ -1222,6 +1272,17 @@ function App() {
     setPlacement(null);
     setSelected([componentId]);
     setFocusRequest({ componentId, nonce: Date.now() });
+  };
+  const locateBoardConfigurationIssue = (
+    logicalInstanceId: string,
+    pinId?: string | null,
+  ) => {
+    const componentId = locateProjectBoardConfigurationIssue(
+      snapshot.project,
+      logicalInstanceId,
+      pinId,
+    );
+    if (componentId) locateCheckIssue(componentId);
   };
   return (
     <div className="app-shell" data-testid="app-shell">
@@ -1727,6 +1788,7 @@ function App() {
             <TabsList className="tabs-list">
               {[
                 "ERC",
+                "Board Config",
                 "Check",
                 "Configure",
                 "Netlist",
@@ -1744,6 +1806,9 @@ function App() {
                   {tab === "Check" && checkReport && !checkReport.ready && (
                     <i />
                   )}
+                  {tab === "Board Config" &&
+                    boardConfigurationReport &&
+                    !boardConfigurationReport.passed && <i />}
                 </TabsTrigger>
               ))}
             </TabsList>
@@ -1779,6 +1844,20 @@ function App() {
                 checking={ercChecking}
                 onCheck={() => void checkErc()}
                 onLocate={locateCheckIssue}
+              />
+            )}{" "}
+            {bottomTab === "Board Config" && (
+              <BoardConfigurationPanel
+                project={snapshot.project}
+                report={boardConfigurationReport}
+                checking={boardConfigurationChecking}
+                language={language}
+                onCheck={() => void checkBoardConfigurations()}
+                onLocate={locateBoardConfigurationIssue}
+                onRemove={(id) => {
+                  void command({ action: "removeBoardConfiguration", id });
+                }}
+                onOpenManager={() => setPackManagerOpen(true)}
               />
             )}{" "}
             {bottomTab === "Waveform" && (
@@ -1913,6 +1992,13 @@ function App() {
           setPlacement(next);
         }}
         onLocate={locateCheckIssue}
+        onSnapshot={(next) => {
+          setBoardConfigurationReport(null);
+          acceptSnapshot(next);
+        }}
+        onRemovePack={(packSha256) =>
+          void command({ action: "removeDevicePack", packSha256 })
+        }
       />
     </div>
   );

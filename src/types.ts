@@ -260,6 +260,54 @@ export type DeviceTreeAdapterReport = {
   }[];
   issues: DeviceTreeDiagnostic[];
 };
+export type DeviceConfigurationData = {
+  formatVersion: number;
+  id: string;
+  name: string;
+  source: string;
+  license: string;
+  target: {
+    packId: string;
+    packVersion: string;
+    deviceId: string;
+    variantId?: string | null;
+  };
+  pinMux: { pinId: string; function: string }[];
+  bootStraps: {
+    pinId: string;
+    value: "low" | "high" | "pullDown" | "pullUp" | "external";
+  }[];
+};
+export type BoardConfigurationSourceFormat = "json" | "deviceTreeSubset";
+export type BoardConfiguration = {
+  id: string;
+  logicalInstanceId: string;
+  sourceFormat: BoardConfigurationSourceFormat;
+  sourceName: string;
+  sourceSha256: string;
+  config: DeviceConfigurationData;
+};
+export type BoardConfigurationCheckReport = {
+  passed: boolean;
+  eligibleInstances: number;
+  configuredInstances: number;
+  entries: {
+    boardConfigurationId: string;
+    logicalInstanceId: string;
+    reference: string;
+    sourceName: string;
+    sourceFormat: BoardConfigurationSourceFormat;
+    report: DeviceConfigReport;
+  }[];
+  unconfigured: {
+    logicalInstanceId: string;
+    reference: string;
+    deviceId: string;
+    code: string;
+    messageZh: string;
+    messageEn: string;
+  }[];
+};
 export type Wire = { id: string; points: Point[] };
 export type NetLabel = { id: string; name: string; position: Point };
 export type Analysis =
@@ -318,6 +366,7 @@ export type Project = {
   spiceLibraries: SpiceLibrary[];
   devicePacks: EmbeddedDevicePack[];
   deviceInstances: DeviceInstance[];
+  boardConfigurations: BoardConfiguration[];
   activeSimulationProfile: string | null;
   uiViewState: {
     activeSheetId: string;
@@ -411,6 +460,7 @@ export type EditorCommand =
       components: Component[];
       wires: Wire[];
       deviceInstances: DeviceInstance[];
+      boardConfigurations: BoardConfiguration[];
     }
   | { action: "addWire"; points: Point[] }
   | { action: "updateWire"; id: string; points: Point[] }
@@ -419,4 +469,6 @@ export type EditorCommand =
   | { action: "updateSimulation"; profile: SimulationProfile }
   | { action: "addSimulationProfile"; profile: SimulationProfile }
   | { action: "deleteSimulationProfile"; id: string }
-  | { action: "selectSimulationProfile"; id: string };
+  | { action: "selectSimulationProfile"; id: string }
+  | { action: "removeBoardConfiguration"; id: string }
+  | { action: "removeDevicePack"; packSha256: string };

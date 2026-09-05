@@ -3,6 +3,7 @@ import { createBlankSnapshot } from "@/blank";
 import {
   deviceConfigCanvasInstances,
   locateDeviceConfigIssue,
+  locateProjectBoardConfigurationIssue,
 } from "@/device-config-location";
 import { placeLocalDeviceUnit } from "@/device-unit-factory";
 import fixture from "../examples/devicepacks/test-mcu.devicepack.json";
@@ -47,6 +48,9 @@ describe("device configuration canvas location", () => {
     expect(locateDeviceConfigIssue(instances, instanceId, "pa0")).toBe(
       ioComponent?.id,
     );
+    expect(
+      locateProjectBoardConfigurationIssue(project, instanceId, "pa0"),
+    ).toBe(ioComponent?.id);
   });
 
   it("does not claim a location when the required unit is not placed", () => {

@@ -96,9 +96,11 @@ SDK Adapter 包含 `id`、`sdkType`、`versionRequirement`、安全的相对 `lo
 
 用户可以在器件包管理器中显式选择一个本地 SDK 根目录进行只读结构匹配。匹配器只支持作为完整路径段的 `*` 和受限文件后缀形式 `*.ext`，限制最多访问 10,000 个目录项、每个模式返回 128 个结果，并忽略逃出所选根目录的符号链接。它不读取 SDK 文件内容、不执行工具、不推断版本，也不把本地绝对路径写入 `.sugeda`。结果中的 `pathMetadataOnly` 仅表示目录结构与元数据模式匹配，不能描述为 SDK 兼容或 Device Tree 配置已经验证。
 
-具有 `alternateFunctions` 或 `bootConfiguration` 规则的器件还可以检查厂商无关的 `.device-config.json`。该受限 IR 绑定精确器件包版本，只包含 PinMux 和启动绑带声明；Rust 会验证引脚、可选功能、重复外设信号及启动配置覆盖。详见 [P3 第四阶段器件配置检查](p3-phase4-device-configuration.md)。配置和本地路径都不持久化，因此工程 schema 仍为 v4。
+具有 `alternateFunctions` 或 `bootConfiguration` 规则的器件还可以检查厂商无关的 `.device-config.json`。该受限 IR 绑定精确器件包版本，只包含 PinMux 和启动绑带声明；Rust 会验证引脚、可选功能、重复外设信号及启动配置覆盖。通过结构与绑定验证后，规范化 IR 可随 schema v4 工程保存，但原始本地路径不会持久化。详见 [P3 第四阶段器件配置检查](p3-phase4-device-configuration.md)。
 
 独立 `.sugareda.dts` Adapter 可以把固定白名单语法转换到同一配置 IR，并保留引脚声明的源码行列。它拒绝 include、phandle、overlay、宏和任意节点，不是通用 Device Tree 兼容声明。诊断可进一步定位到所选逻辑器件实例中实际承载该引脚的 symbol unit。详见 [P3 第五阶段 Device Tree Adapter](p3-phase5-device-tree-adapter.md)。
+
+通过结构和目标绑定验证的配置可保存到 schema v4 的 `boardConfigurations`。工程仅嵌入规范化 IR、来源文件名和 SHA-256，不依赖原始路径；每个逻辑实例最多一个配置。项目级检查会重新运行相同规则，并对可配置但未绑定的实例报告 `board-config.missing`。详见 [P3 第六阶段工程内板级配置](p3-phase6-board-configuration.md)。
 
 文档仅保存 `kind`、`title`、HTTP(S) `sourceUrl`、`revision` 和 `license` 来源元数据，导入时不下载 URL。
 

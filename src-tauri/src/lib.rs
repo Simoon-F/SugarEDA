@@ -1,4 +1,5 @@
 mod application;
+mod board_config;
 mod device_config;
 mod device_instance;
 mod device_pack;
@@ -288,6 +289,39 @@ fn check_device_tree_config(
     .map_err(|error| error.to_string())
 }
 #[tauri::command]
+fn import_board_configuration(
+    logical_instance_id: String,
+    path: String,
+    source_format: board_config::BoardConfigurationSourceFormat,
+    state: State<'_, AppState>,
+) -> Result<WorkspaceSnapshot, String> {
+    let instance_id = uuid::Uuid::parse_str(&logical_instance_id)
+        .map_err(|_| "Logical device instance id is invalid".to_owned())?;
+    let mut workspace = state
+        .workspace
+        .lock()
+        .map_err(|_| "Workspace lock was poisoned".to_owned())?;
+    let configuration = board_config::load_for_instance(
+        &workspace.project,
+        instance_id,
+        &PathBuf::from(path),
+        source_format,
+    )?;
+    workspace.upsert_board_configuration(configuration)?;
+    Ok(workspace.snapshot())
+}
+
+#[tauri::command]
+fn check_board_configurations(
+    state: State<'_, AppState>,
+) -> Result<board_config::BoardConfigurationCheckReport, String> {
+    let workspace = state
+        .workspace
+        .lock()
+        .map_err(|_| "Workspace lock was poisoned".to_owned())?;
+    board_config::check_all(&workspace.project)
+}
+#[tauri::command]
 fn simulation_status(configured_path: Option<String>, state: State<'_, AppState>) -> BackendStatus {
     state.simulator.status(configured_path.as_deref())
 }
@@ -373,6 +407,8 @@ pub fn run() {
             inspect_sdk_adapter,
             check_device_config,
             check_device_tree_config,
+            import_board_configuration,
+            check_board_configurations,
             export_waveform,
             simulation_status,
             run_simulation,

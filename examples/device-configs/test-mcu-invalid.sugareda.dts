@@ -10,6 +10,7 @@
     pack-id = "org.sugareda.test.mcu";
     pack-version = "1.0.0";
     device-id = "stmcu24";
+    variant-id = "industrial";
 
     pinmux {
       assignment@0 { pin = "pa0"; function = "I2C1_SCL"; };

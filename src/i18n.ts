@@ -98,6 +98,7 @@ const zh: Dictionary = {
   Close: "关闭",
   "DEVICE PACKS": "器件包",
   ERC: "电气规则",
+  "Board Config": "板级配置",
   "Electrical rules check": "电气规则检查",
   "Run ERC": "运行 ERC",
   "ERC passed": "ERC 通过",

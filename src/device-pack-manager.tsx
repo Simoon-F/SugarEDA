@@ -8,9 +8,10 @@ import {
   ScanSearch,
   Search,
   ShieldCheck,
+  Trash2,
   X,
 } from "lucide-react";
-import type { ComponentPlacement, Project } from "./types";
+import type { ComponentPlacement, Project, Snapshot } from "./types";
 import { useI18n } from "./i18n";
 import { deviceCapabilities } from "./device-pack";
 import { DeviceUnitActions } from "./device-unit-actions";
@@ -32,6 +33,8 @@ type Props = {
   onImport: () => void;
   onPlace: (placement: ComponentPlacement) => void;
   onLocate: (componentId: string) => void;
+  onSnapshot: (snapshot: Snapshot) => void;
+  onRemovePack: (packSha256: string) => void;
 };
 
 export function DevicePackManager({
@@ -41,6 +44,8 @@ export function DevicePackManager({
   onImport,
   onPlace,
   onLocate,
+  onSnapshot,
+  onRemovePack,
 }: Props) {
   const packs = project.devicePacks;
   const { language, t } = useI18n();
@@ -190,6 +195,9 @@ export function DevicePackManager({
               device.sdkAdapterIds.includes(adapter.id),
             );
             const configurationScope = deviceConfigurationScope(device);
+            const packInUse = project.deviceInstances.some(
+              (instance) => instance.packSha256 === pack.sha256,
+            );
             const l5Label = [
               configurationScope.available ? "Config" : "",
               sdkAdapters.length > 0 ? "SDK meta" : "",
@@ -258,6 +266,23 @@ export function DevicePackManager({
                       ? "已验证并嵌入工程"
                       : "Validated and embedded in project"}
                   </div>
+                  <button
+                    className="pack-remove-button"
+                    disabled={packInUse}
+                    title={
+                      packInUse
+                        ? language === "zh-CN"
+                          ? "器件包仍被画布中的逻辑器件使用"
+                          : "The pack is still used by logical devices on the canvas"
+                        : language === "zh-CN"
+                          ? "从工程移除此器件包（可撤销）"
+                          : "Remove this pack from the project (undoable)"
+                    }
+                    onClick={() => onRemovePack(pack.sha256)}
+                  >
+                    <Trash2 />
+                    {language === "zh-CN" ? "移除器件包" : "Remove pack"}
+                  </button>
                   {(configurationScope.available || sdkAdapters.length > 0) && (
                     <div className="pack-tool-actions">
                       {configurationScope.available && (
@@ -338,6 +363,7 @@ export function DevicePackManager({
           onClose();
           onLocate(componentId);
         }}
+        onImported={onSnapshot}
       />
     </div>
   );

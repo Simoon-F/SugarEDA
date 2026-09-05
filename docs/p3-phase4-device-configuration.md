@@ -49,7 +49,7 @@
 - 严格拒绝未知字段、未知枚举、超长字符串、控制字符和非安全标识符。
 - 格式没有路径、URL、include、脚本、命令或二进制载荷字段，因此不能引用外部文件或执行代码。
 - 校验由 Rust 完成；React 只负责选择文件和展示报告。
-- 本地文件路径和配置内容不会写入 `.sugeda`，因此 schema 保持 v4，撤销/重做状态不受影响。
+- 原始本地路径不会写入 `.sugeda`。通过检查器显式绑定后，规范化配置 IR、来源文件名和 SHA-256 会随 schema v4 工程保存；导入、替换和移除均支持撤销/重做。详见 [P3 第六阶段工程内板级配置](p3-phase6-board-configuration.md)。
 
 仓库提供 `examples/device-configs/test-mcu-valid.device-config.json` 和对应非法夹具。二者均为 SugarEDA 虚构测试数据，以 CC0-1.0 发布。
 
@@ -61,6 +61,8 @@
 - `src-tauri/src/device_config/mod.rs`：文件读取与公共检查 API。
 - `src/device-configuration.ts`：前端可检查能力派生，不复制后端规则。
 - `src/device-config-inspector.tsx`：文件选择和诊断展示。
+- `src-tauri/src/board_config/*`：工程绑定、持久化约束与项目级检查。
+- `src/board-configuration-panel.tsx`：工程内配置状态、诊断和定位。
 - `src/device-pack-manager.tsx`：只计算目标并打开独立检查器。
 
 ## 后续接入

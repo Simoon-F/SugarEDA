@@ -1,9 +1,17 @@
-import type { Component, DeviceInstance, Point, Project, Wire } from "./types";
+import type {
+  BoardConfiguration,
+  Component,
+  DeviceInstance,
+  Point,
+  Project,
+  Wire,
+} from "./types";
 
 export type ClipboardPayload = {
   components: Component[];
   wires: Wire[];
   deviceInstances: DeviceInstance[];
+  boardConfigurations: BoardConfiguration[];
 };
 
 const translate = (points: Point[], delta: Point) =>
@@ -41,6 +49,11 @@ export function clipboardFromSelection(
     deviceInstances: project.deviceInstances
       .filter((instance) => logicalIds.has(instance.id))
       .map((instance) => structuredClone(instance)),
+    boardConfigurations: project.boardConfigurations
+      .filter((configuration) =>
+        logicalIds.has(configuration.logicalInstanceId),
+      )
+      .map((configuration) => structuredClone(configuration)),
   };
 }
 
@@ -83,6 +96,19 @@ export function instantiateClipboard(
       component.device.logicalInstanceId = instance.id;
     return component;
   });
+  const boardConfigurations = clipboard.boardConfigurations.flatMap(
+    (source) => {
+      const instance = instances.get(source.logicalInstanceId);
+      if (!instance) return [];
+      return [
+        {
+          ...structuredClone(source),
+          id: crypto.randomUUID(),
+          logicalInstanceId: instance.id,
+        },
+      ];
+    },
+  );
   if (reservedReferences)
     for (const reference of used) reservedReferences.add(reference);
   return {
@@ -92,5 +118,6 @@ export function instantiateClipboard(
       points: translate(source.points, offset),
     })),
     deviceInstances: [...instances.values()],
+    boardConfigurations,
   };
 }

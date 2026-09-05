@@ -35,6 +35,8 @@ pub enum ProjectError {
     DeviceBinding,
     #[error("logical device instance is invalid: {0}")]
     DeviceInstance(String),
+    #[error("board configuration is invalid: {0}")]
+    BoardConfiguration(String),
 }
 
 pub fn load(path: &Path) -> Result<Project, ProjectError> {
@@ -123,6 +125,7 @@ pub fn validate(project: &Project) -> Result<(), ProjectError> {
         crate::models::validate_library(library)?;
     }
     let mut hashes = std::collections::BTreeSet::new();
+    let mut pack_versions = std::collections::BTreeSet::new();
     for embedded in &project.device_packs {
         crate::device_pack::validate(&embedded.pack)
             .map_err(|error| ProjectError::DevicePack(error.to_string()))?;
@@ -135,6 +138,15 @@ pub fn validate(project: &Project) -> Result<(), ProjectError> {
             return Err(ProjectError::DevicePack(
                 "duplicate device-pack content hash".into(),
             ));
+        }
+        if !pack_versions.insert((
+            embedded.pack.manifest.id.as_str(),
+            embedded.pack.manifest.version.as_str(),
+        )) {
+            return Err(ProjectError::DevicePack(format!(
+                "duplicate device-pack identity {} version {}",
+                embedded.pack.manifest.id, embedded.pack.manifest.version
+            )));
         }
     }
     for component in project.sheets.iter().flat_map(|sheet| &sheet.components) {
@@ -162,6 +174,7 @@ pub fn validate(project: &Project) -> Result<(), ProjectError> {
         }
     }
     crate::device_instance::validate(project).map_err(ProjectError::DeviceInstance)?;
+    crate::board_config::validate_project(project).map_err(ProjectError::BoardConfiguration)?;
     Ok(())
 }
 
@@ -248,5 +261,34 @@ mod tests {
                 .logical_instance_id,
             Some(migrated_v3.device_instances[0].id)
         );
+    }
+
+    #[test]
+    fn schema_v4_without_board_configurations_opens_as_an_empty_collection() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("legacy-v4.sugeda");
+        let mut value = serde_json::to_value(Project::blank("legacy v4")).unwrap();
+        value.as_object_mut().unwrap().remove("boardConfigurations");
+        std::fs::write(&path, serde_json::to_vec(&value).unwrap()).unwrap();
+        let reopened = load(&path).unwrap();
+        assert_eq!(reopened.schema_version, 4);
+        assert!(reopened.board_configurations.is_empty());
+    }
+
+    #[test]
+    fn rejects_duplicate_pack_id_and_version_even_with_distinct_hashes() {
+        let pack = crate::device_pack::import_bytes(include_bytes!(
+            "../../examples/devicepacks/test-mcu.devicepack.json"
+        ))
+        .unwrap();
+        let mut changed = pack.clone();
+        changed.pack.manifest.name.push_str(" changed");
+        changed.sha256 = crate::device_pack::content_hash(&changed.pack);
+        let mut project = Project::blank("conflict");
+        project.device_packs.extend([pack, changed]);
+        assert!(matches!(
+            validate(&project),
+            Err(ProjectError::DevicePack(_))
+        ));
     }
 }

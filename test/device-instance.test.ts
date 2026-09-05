@@ -81,6 +81,28 @@ describe("logical multi-unit devices", () => {
       logicalInstanceId: logicalId,
       position: { x: 300, y: 0 },
     });
+    project.boardConfigurations.push({
+      id: "config-original",
+      logicalInstanceId: logicalId,
+      sourceFormat: "json",
+      sourceName: "test-mcu-valid.device-config.json",
+      sourceSha256: "a".repeat(64),
+      config: {
+        formatVersion: 1,
+        id: "org.sugareda.test.board",
+        name: "Test board",
+        source: "SugarEDA test fixture",
+        license: "CC0-1.0",
+        target: {
+          packId: fixture.manifest.id,
+          packVersion: fixture.manifest.version,
+          deviceId: "stmcu24",
+          variantId: "industrial",
+        },
+        pinMux: [],
+        bootStraps: [],
+      },
+    });
     const selected = new Set(
       project.sheets[0].components.map((component) => component.id),
     );
@@ -97,5 +119,10 @@ describe("logical multi-unit devices", () => {
       new Set(pasted.components.map((item) => item.device?.logicalInstanceId))
         .size,
     ).toBe(1);
+    expect(pasted.boardConfigurations).toHaveLength(1);
+    expect(pasted.boardConfigurations[0].id).not.toBe("config-original");
+    expect(pasted.boardConfigurations[0].logicalInstanceId).toBe(
+      pasted.deviceInstances[0].id,
+    );
   });
 });

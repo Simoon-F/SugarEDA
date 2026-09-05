@@ -373,6 +373,28 @@ body.component-dragging {
 .pack-tool-button svg {
   width: 13px;
 }
+.pack-remove-button {
+  height: 27px;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  margin-top: 8px;
+  padding: 0 8px;
+  color: #9a3440;
+  background: #fff1f2;
+  border: 1px solid #f1c8cc;
+  border-radius: 7px;
+  font-size: 10px;
+  font-weight: 650;
+}
+.pack-remove-button:disabled {
+  color: var(--text-muted);
+  background: #f3f5f7;
+  border-color: var(--line);
+}
+.pack-remove-button svg {
+  width: 12px;
+}
 .unit-actions {
   display: grid;
   gap: 5px;
