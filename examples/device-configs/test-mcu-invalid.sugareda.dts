@@ -1,0 +1,23 @@
+/dts-v1/;
+
+/ {
+  sugareda-device-config {
+    compatible = "sugareda,device-config-v1";
+    config-id = "org.sugareda.test.mcu.invalid-dts";
+    config-name = "SugarEDA Test MCU invalid Device Tree configuration";
+    source = "SugarEDA self-contained negative test fixture; fictional data only";
+    license = "CC0-1.0";
+    pack-id = "org.sugareda.test.mcu";
+    pack-version = "1.0.0";
+    device-id = "stmcu24";
+
+    pinmux {
+      assignment@0 { pin = "pa0"; function = "I2C1_SCL"; };
+      assignment@1 { pin = "pa2"; function = "I2C1_SCL"; };
+      assignment@2 { pin = "pa1"; function = "SPI9_MISO"; };
+    };
+
+    boot-straps {
+    };
+  };
+};

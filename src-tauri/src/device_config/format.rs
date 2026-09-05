@@ -1,3 +1,6 @@
+use super::{
+    BootStrapAssignment, BootStrapValue, DeviceConfig, DeviceConfigTarget, PinMuxAssignment,
+};
 use serde::Deserialize;
 use thiserror::Error;
 
@@ -9,48 +12,48 @@ const MAX_TEXT_LENGTH: usize = 512;
 const MAX_PIN_MUX_ASSIGNMENTS: usize = 4096;
 const MAX_BOOT_STRAPS: usize = 512;
 
-#[derive(Debug, Clone, Deserialize, PartialEq, Eq)]
+#[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
-pub(super) struct DeviceConfig {
-    pub format_version: u32,
-    pub id: String,
-    pub name: String,
-    pub source: String,
-    pub license: String,
-    pub target: DeviceConfigTarget,
+struct JsonDeviceConfig {
+    format_version: u32,
+    id: String,
+    name: String,
+    source: String,
+    license: String,
+    target: JsonDeviceConfigTarget,
     #[serde(default)]
-    pub pin_mux: Vec<PinMuxAssignment>,
+    pin_mux: Vec<JsonPinMuxAssignment>,
     #[serde(default)]
-    pub boot_straps: Vec<BootStrapAssignment>,
+    boot_straps: Vec<JsonBootStrapAssignment>,
 }
 
-#[derive(Debug, Clone, Deserialize, PartialEq, Eq)]
+#[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
-pub(super) struct DeviceConfigTarget {
-    pub pack_id: String,
-    pub pack_version: String,
-    pub device_id: String,
+struct JsonDeviceConfigTarget {
+    pack_id: String,
+    pack_version: String,
+    device_id: String,
     #[serde(default)]
-    pub variant_id: Option<String>,
+    variant_id: Option<String>,
 }
 
-#[derive(Debug, Clone, Deserialize, PartialEq, Eq)]
+#[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
-pub(super) struct PinMuxAssignment {
-    pub pin_id: String,
-    pub function: String,
+struct JsonPinMuxAssignment {
+    pin_id: String,
+    function: String,
 }
 
-#[derive(Debug, Clone, Deserialize, PartialEq, Eq)]
+#[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
-pub(super) struct BootStrapAssignment {
-    pub pin_id: String,
-    pub value: BootStrapValue,
+struct JsonBootStrapAssignment {
+    pin_id: String,
+    value: JsonBootStrapValue,
 }
 
-#[derive(Debug, Clone, Deserialize, PartialEq, Eq)]
+#[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
-pub(super) enum BootStrapValue {
+enum JsonBootStrapValue {
     Low,
     High,
     PullDown,
@@ -85,12 +88,49 @@ pub(super) fn parse(bytes: &[u8]) -> Result<DeviceConfig, DeviceConfigError> {
     if bytes.len() as u64 > MAX_CONFIG_BYTES {
         return Err(DeviceConfigError::TooLarge);
     }
-    let config: DeviceConfig = serde_json::from_slice(bytes)?;
-    validate(&config)?;
-    Ok(config)
+    let source: JsonDeviceConfig = serde_json::from_slice(bytes)?;
+    Ok(into_ir(source))
 }
 
-fn validate(config: &DeviceConfig) -> Result<(), DeviceConfigError> {
+fn into_ir(source: JsonDeviceConfig) -> DeviceConfig {
+    DeviceConfig {
+        format_version: source.format_version,
+        id: source.id,
+        name: source.name,
+        source: source.source,
+        license: source.license,
+        target: DeviceConfigTarget {
+            pack_id: source.target.pack_id,
+            pack_version: source.target.pack_version,
+            device_id: source.target.device_id,
+            variant_id: source.target.variant_id,
+        },
+        pin_mux: source
+            .pin_mux
+            .into_iter()
+            .map(|assignment| PinMuxAssignment {
+                pin_id: assignment.pin_id,
+                function: assignment.function,
+            })
+            .collect(),
+        boot_straps: source
+            .boot_straps
+            .into_iter()
+            .map(|strap| BootStrapAssignment {
+                pin_id: strap.pin_id,
+                value: match strap.value {
+                    JsonBootStrapValue::Low => BootStrapValue::Low,
+                    JsonBootStrapValue::High => BootStrapValue::High,
+                    JsonBootStrapValue::PullDown => BootStrapValue::PullDown,
+                    JsonBootStrapValue::PullUp => BootStrapValue::PullUp,
+                    JsonBootStrapValue::External => BootStrapValue::External,
+                },
+            })
+            .collect(),
+    }
+}
+
+pub(crate) fn validate(config: &DeviceConfig) -> Result<(), DeviceConfigError> {
     if config.format_version != DEVICE_CONFIG_FORMAT_VERSION {
         return Err(DeviceConfigError::invalid(
             "device-config.unsupported-version",

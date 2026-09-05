@@ -6,6 +6,7 @@
 
 mod checker;
 mod format;
+mod ir;
 
 use crate::{device_pack::DeviceDefinition, device_pack::EmbeddedDevicePack, domain::Project};
 use std::{fs, path::Path};
@@ -13,6 +14,9 @@ use std::{fs, path::Path};
 pub use checker::DeviceConfigReport;
 pub use format::DeviceConfigError;
 use format::{parse, MAX_CONFIG_BYTES};
+pub(crate) use ir::{
+    BootStrapAssignment, BootStrapValue, DeviceConfig, DeviceConfigTarget, PinMuxAssignment,
+};
 
 pub fn check_file(
     project: &Project,
@@ -48,8 +52,18 @@ pub fn check_bytes(
     bytes: &[u8],
 ) -> Result<DeviceConfigReport, DeviceConfigError> {
     let config = parse(bytes)?;
+    check_ir(project, pack_sha256, device_id, &config)
+}
+
+pub(crate) fn check_ir(
+    project: &Project,
+    pack_sha256: &str,
+    device_id: &str,
+    config: &DeviceConfig,
+) -> Result<DeviceConfigReport, DeviceConfigError> {
+    format::validate(config)?;
     let (embedded, device) = selected_device(project, pack_sha256, device_id)?;
-    Ok(checker::check(&config, embedded, device))
+    Ok(checker::check(config, embedded, device))
 }
 
 fn selected_device<'a>(

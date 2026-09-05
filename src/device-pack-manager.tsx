@@ -23,6 +23,7 @@ import {
   type DeviceConfigTarget,
 } from "./device-config-inspector";
 import { deviceConfigurationScope } from "./device-configuration";
+import { deviceConfigCanvasInstances } from "./device-config-location";
 
 type Props = {
   open: boolean;
@@ -30,6 +31,7 @@ type Props = {
   onClose: () => void;
   onImport: () => void;
   onPlace: (placement: ComponentPlacement) => void;
+  onLocate: (componentId: string) => void;
 };
 
 export function DevicePackManager({
@@ -38,6 +40,7 @@ export function DevicePackManager({
   onClose,
   onImport,
   onPlace,
+  onLocate,
 }: Props) {
   const packs = project.devicePacks;
   const { language, t } = useI18n();
@@ -269,6 +272,11 @@ export function DevicePackManager({
                               alternateFunctionCount:
                                 configurationScope.alternateFunctionCount,
                               bootPinCount: configurationScope.bootPinCount,
+                              instances: deviceConfigCanvasInstances(
+                                project,
+                                pack.sha256,
+                                device.id,
+                              ),
                             })
                           }
                         >
@@ -325,6 +333,11 @@ export function DevicePackManager({
         target={configTarget}
         language={language}
         onClose={() => setConfigTarget(null)}
+        onLocate={(componentId) => {
+          setConfigTarget(null);
+          onClose();
+          onLocate(componentId);
+        }}
       />
     </div>
   );

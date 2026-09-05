@@ -1,6 +1,6 @@
 # P3 第四阶段：厂商无关器件配置检查
 
-本阶段新增 L5 的受限配置中间格式和 Rust 校验器。它验证 DevicePack 已声明的 PinMux、物理引脚、复用信号冲突和启动绑带覆盖，不解析厂商 SDK、Device Tree 或任意脚本。
+本阶段新增 L5 的受限配置中间格式和 Rust 校验器。它验证 DevicePack 已声明的 PinMux、物理引脚、复用信号冲突和启动绑带覆盖。后续阶段已增加独立的 [受限 Device Tree Adapter](p3-phase5-device-tree-adapter.md)，但仍不解析通用 DTS、厂商 SDK 或任意脚本。
 
 ## 文件格式
 
@@ -55,7 +55,8 @@
 
 ## 模块边界
 
-- `src-tauri/src/device_config/format.rs`：格式、反序列化和资源上限。
+- `src-tauri/src/device_config/ir.rs`：JSON 与 Adapter 共用的配置 IR。
+- `src-tauri/src/device_config/format.rs`：JSON 反序列化和资源上限。
 - `src-tauri/src/device_config/checker.rs`：DevicePack 语义检查和双语诊断。
 - `src-tauri/src/device_config/mod.rs`：文件读取与公共检查 API。
 - `src/device-configuration.ts`：前端可检查能力派生，不复制后端规则。
@@ -64,6 +65,6 @@
 
 ## 后续接入
 
-未来获授权的厂商 Adapter 可以把用户本地 SDK、PinMux 工具导出或 Device Tree 转换为此中间格式，再交给同一 Rust 校验器。解析器必须是独立、只读且有资源上限的模块，不能修改本格式校验器来执行厂商工具。
+受限 Device Tree Adapter 已可把 SugarEDA 独立子集转换为此中间格式。未来获授权的厂商 Adapter 仍必须先转换到同一 IR，再交给 Rust 校验器。每个解析器必须是独立、只读且有资源上限的模块，不能修改本格式校验器来执行厂商工具。
 
 RK3576 不会成为架构特例。若未来有授权数据，它与 MCU、模拟器件一样通过普通 DevicePack 和独立 Adapter 接入；本阶段不下载或捆绑任何厂商 SDK，也不声称配置检查或 ngspice 能执行固件。

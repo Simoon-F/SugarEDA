@@ -237,6 +237,29 @@ export type DeviceConfigReport = {
   checkedAssignments: number;
   issues: DeviceConfigIssue[];
 };
+export type DeviceTreeDiagnostic = {
+  code: string;
+  severity: "error" | "warning" | "info";
+  line?: number | null;
+  column?: number | null;
+  messageZh: string;
+  messageEn: string;
+};
+export type DeviceTreeAdapterReport = {
+  adapter: "sugaredaDeviceTreeSubsetV1";
+  sourceName: string;
+  translated: boolean;
+  valid: boolean;
+  translatedAssignments: number;
+  configReport?: DeviceConfigReport | null;
+  sourceLocations: {
+    pinId: string;
+    section: "pinMux" | "bootStrap";
+    line: number;
+    column: number;
+  }[];
+  issues: DeviceTreeDiagnostic[];
+};
 export type Wire = { id: string; points: Point[] };
 export type NetLabel = { id: string; name: string; position: Point };
 export type Analysis =

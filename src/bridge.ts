@@ -9,6 +9,7 @@ import type {
   Snapshot,
   ErcReport,
   DeviceConfigReport,
+  DeviceTreeAdapterReport,
   SdkAdapterReport,
 } from "./types";
 export const isDesktop = () => "__TAURI_INTERNALS__" in window;
@@ -49,6 +50,12 @@ export const api = {
     }),
   checkDeviceConfig: (packSha256: string, deviceId: string, path: string) =>
     invoke<DeviceConfigReport>("check_device_config", {
+      packSha256,
+      deviceId,
+      path,
+    }),
+  checkDeviceTreeConfig: (packSha256: string, deviceId: string, path: string) =>
+    invoke<DeviceTreeAdapterReport>("check_device_tree_config", {
       packSha256,
       deviceId,
       path,

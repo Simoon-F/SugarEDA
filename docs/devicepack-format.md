@@ -4,14 +4,14 @@ DevicePack 是 SugarEDA 的厂商无关、纯数据器件包。文件名使用 `
 
 ## 能力等级
 
-| 等级 | 含义                          | P3 第一阶段                                        |
-| ---- | ----------------------------- | -------------------------------------------------- |
-| L1   | 符号、引脚、变体和封装映射    | 已实现                                             |
-| L2   | 电气元数据和 ERC              | 已实现                                             |
-| L3   | SPICE 模型和端口绑定          | 已实现安全内嵌文本模型                             |
-| L4   | IBIS/S 参数信号完整性         | 仅接口元数据，无求解器                             |
-| L5   | SDK、PinMux、Device Tree 检查 | Adapter 路径发现与受限配置 IR 检查；不解析 SDK/DTS |
-| L6   | 固件或操作系统功能仿真        | 未实现                                             |
+| 等级 | 含义                          | P3 第一阶段                                                            |
+| ---- | ----------------------------- | ---------------------------------------------------------------------- |
+| L1   | 符号、引脚、变体和封装映射    | 已实现                                                                 |
+| L2   | 电气元数据和 ERC              | 已实现                                                                 |
+| L3   | SPICE 模型和端口绑定          | 已实现安全内嵌文本模型                                                 |
+| L4   | IBIS/S 参数信号完整性         | 仅接口元数据，无求解器                                                 |
+| L5   | SDK、PinMux、Device Tree 检查 | Adapter 路径发现、受限配置 IR 与独立 DTS 子集转换；不解析 SDK/通用 DTS |
+| L6   | 固件或操作系统功能仿真        | 未实现                                                                 |
 
 能力按器件独立计算。只有符号的器件只显示“可画原理图”，不能描述为可完整仿真。SDK 元数据不代表存在电气仿真模型。
 
@@ -97,6 +97,8 @@ SDK Adapter 包含 `id`、`sdkType`、`versionRequirement`、安全的相对 `lo
 用户可以在器件包管理器中显式选择一个本地 SDK 根目录进行只读结构匹配。匹配器只支持作为完整路径段的 `*` 和受限文件后缀形式 `*.ext`，限制最多访问 10,000 个目录项、每个模式返回 128 个结果，并忽略逃出所选根目录的符号链接。它不读取 SDK 文件内容、不执行工具、不推断版本，也不把本地绝对路径写入 `.sugeda`。结果中的 `pathMetadataOnly` 仅表示目录结构与元数据模式匹配，不能描述为 SDK 兼容或 Device Tree 配置已经验证。
 
 具有 `alternateFunctions` 或 `bootConfiguration` 规则的器件还可以检查厂商无关的 `.device-config.json`。该受限 IR 绑定精确器件包版本，只包含 PinMux 和启动绑带声明；Rust 会验证引脚、可选功能、重复外设信号及启动配置覆盖。详见 [P3 第四阶段器件配置检查](p3-phase4-device-configuration.md)。配置和本地路径都不持久化，因此工程 schema 仍为 v4。
+
+独立 `.sugareda.dts` Adapter 可以把固定白名单语法转换到同一配置 IR，并保留引脚声明的源码行列。它拒绝 include、phandle、overlay、宏和任意节点，不是通用 Device Tree 兼容声明。诊断可进一步定位到所选逻辑器件实例中实际承载该引脚的 symbol unit。详见 [P3 第五阶段 Device Tree Adapter](p3-phase5-device-tree-adapter.md)。
 
 文档仅保存 `kind`、`title`、HTTP(S) `sourceUrl`、`revision` 和 `license` 来源元数据，导入时不下载 URL。
 

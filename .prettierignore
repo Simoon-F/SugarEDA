@@ -8,3 +8,4 @@ src-tauri/resources/ngspice/linux-*
 package-lock.json
 src-tauri/Cargo.lock
 examples/*.sugeda
+examples/device-configs/*.sugareda.dts

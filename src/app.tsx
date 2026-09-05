@@ -1912,6 +1912,7 @@ function App() {
           setTool("select");
           setPlacement(next);
         }}
+        onLocate={locateCheckIssue}
       />
     </div>
   );

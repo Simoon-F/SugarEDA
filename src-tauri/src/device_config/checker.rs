@@ -1,4 +1,4 @@
-use super::format::DeviceConfig;
+use super::DeviceConfig;
 use crate::device_pack::{DeviceDefinition, DeviceRuleKind, EmbeddedDevicePack};
 use serde::Serialize;
 use std::collections::{BTreeMap, BTreeSet};

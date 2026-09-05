@@ -1,0 +1,26 @@
+/dts-v1/;
+
+/ {
+  sugareda-device-config {
+    compatible = "sugareda,device-config-v1";
+    config-id = "org.sugareda.test.mcu.valid-dts";
+    config-name = "SugarEDA Test MCU valid Device Tree configuration";
+    source = "SugarEDA self-contained test fixture; fictional data only";
+    license = "CC0-1.0";
+    pack-id = "org.sugareda.test.mcu";
+    pack-version = "1.0.0";
+    device-id = "stmcu24";
+    variant-id = "industrial";
+
+    pinmux {
+      assignment@0 { pin = "pa0"; function = "UART1_TX"; };
+      assignment@1 { pin = "pa1"; function = "I2C2_SDA"; };
+      assignment@2 { pin = "pa4"; function = "SPI1_MOSI"; };
+      assignment@3 { pin = "pa6"; function = "SPI1_SCK"; };
+    };
+
+    boot-straps {
+      strap@0 { pin = "boot0"; value = "pull-down"; };
+    };
+  };
+};
