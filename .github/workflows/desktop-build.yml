@@ -2,17 +2,13 @@ name: Build SugarEDA Desktop
 
 on:
   workflow_dispatch:
-  push:
-    branches:
-      - master
-  pull_request:
 
 permissions:
   contents: read
 
 concurrency:
   group: desktop-build-${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: true
+  cancel-in-progress: false
 
 jobs:
   build:
