@@ -1,4 +1,5 @@
 mod application;
+mod device_config;
 mod device_instance;
 mod device_pack;
 mod domain;
@@ -248,6 +249,25 @@ fn inspect_sdk_adapter(
     )
 }
 #[tauri::command]
+fn check_device_config(
+    pack_sha256: String,
+    device_id: String,
+    path: String,
+    state: State<'_, AppState>,
+) -> Result<device_config::DeviceConfigReport, String> {
+    let workspace = state
+        .workspace
+        .lock()
+        .map_err(|_| "Workspace lock was poisoned".to_owned())?;
+    device_config::check_file(
+        &workspace.project,
+        &pack_sha256,
+        &device_id,
+        &PathBuf::from(path),
+    )
+    .map_err(|error| error.to_string())
+}
+#[tauri::command]
 fn simulation_status(configured_path: Option<String>, state: State<'_, AppState>) -> BackendStatus {
     state.simulator.status(configured_path.as_deref())
 }
@@ -331,6 +351,7 @@ pub fn run() {
             import_device_pack,
             run_erc,
             inspect_sdk_adapter,
+            check_device_config,
             export_waveform,
             simulation_status,
             run_simulation,

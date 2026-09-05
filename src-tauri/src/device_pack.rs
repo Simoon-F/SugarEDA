@@ -781,8 +781,13 @@ pub fn capabilities(pack: &DevicePack, device: &DeviceDefinition) -> Vec<DeviceP
         },
         DevicePackCapability {
             level: 5,
-            code: "sdkAdapterMetadata".into(),
-            available: !device.sdk_adapter_ids.is_empty(),
+            code: "deviceConfiguration".into(),
+            available: !device.sdk_adapter_ids.is_empty()
+                || !device.alternate_functions.is_empty()
+                || device
+                    .rules
+                    .iter()
+                    .any(|rule| rule.kind == DeviceRuleKind::BootConfiguration),
         },
         DevicePackCapability {
             level: 6,

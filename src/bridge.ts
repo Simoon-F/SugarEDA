@@ -8,6 +8,7 @@ import type {
   SimulationResult,
   Snapshot,
   ErcReport,
+  DeviceConfigReport,
   SdkAdapterReport,
 } from "./types";
 export const isDesktop = () => "__TAURI_INTERNALS__" in window;
@@ -45,6 +46,12 @@ export const api = {
       packSha256,
       adapterId,
       rootPath,
+    }),
+  checkDeviceConfig: (packSha256: string, deviceId: string, path: string) =>
+    invoke<DeviceConfigReport>("check_device_config", {
+      packSha256,
+      deviceId,
+      path,
     }),
   exportWaveform: (path: string, csv: string) =>
     invoke<void>("export_waveform", { path, csv }),

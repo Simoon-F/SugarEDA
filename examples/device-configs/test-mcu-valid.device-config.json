@@ -1,0 +1,20 @@
+{
+  "formatVersion": 1,
+  "id": "org.sugareda.test.mcu.valid-config",
+  "name": "SugarEDA Test MCU valid configuration",
+  "source": "SugarEDA self-contained test fixture; fictional data only",
+  "license": "CC0-1.0",
+  "target": {
+    "packId": "org.sugareda.test.mcu",
+    "packVersion": "1.0.0",
+    "deviceId": "stmcu24",
+    "variantId": "industrial"
+  },
+  "pinMux": [
+    { "pinId": "pa0", "function": "UART1_TX" },
+    { "pinId": "pa1", "function": "I2C2_SDA" },
+    { "pinId": "pa4", "function": "SPI1_MOSI" },
+    { "pinId": "pa6", "function": "SPI1_SCK" }
+  ],
+  "bootStraps": [{ "pinId": "boot0", "value": "pullDown" }]
+}

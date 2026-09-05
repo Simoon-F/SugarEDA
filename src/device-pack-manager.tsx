@@ -5,6 +5,7 @@ import {
   Cpu,
   FileUp,
   FolderSearch,
+  ScanSearch,
   Search,
   ShieldCheck,
   X,
@@ -17,6 +18,11 @@ import {
   SdkAdapterInspector,
   type SdkInspectionTarget,
 } from "./sdk-adapter-inspector";
+import {
+  DeviceConfigInspector,
+  type DeviceConfigTarget,
+} from "./device-config-inspector";
+import { deviceConfigurationScope } from "./device-configuration";
 
 type Props = {
   open: boolean;
@@ -39,6 +45,9 @@ export function DevicePackManager({
   const [vendor, setVendor] = useState("all");
   const [type, setType] = useState("all");
   const [sdkTarget, setSdkTarget] = useState<SdkInspectionTarget | null>(null);
+  const [configTarget, setConfigTarget] = useState<DeviceConfigTarget | null>(
+    null,
+  );
   const entries = useMemo(
     () =>
       packs.flatMap((pack) =>
@@ -166,7 +175,7 @@ export function DevicePackManager({
               spice: levels.find((item) => item.level === 3)?.available,
               signalIntegrity: levels.find((item) => item.level === 4)
                 ?.available,
-              sdk: levels.find((item) => item.level === 5)?.available,
+              configuration: levels.find((item) => item.level === 5)?.available,
             };
             const symbol = pack.pack.symbols.find(
               (item) => item.id === device.symbolId,
@@ -177,6 +186,13 @@ export function DevicePackManager({
             const sdkAdapters = pack.pack.sdkAdapters.filter((adapter) =>
               device.sdkAdapterIds.includes(adapter.id),
             );
+            const configurationScope = deviceConfigurationScope(device);
+            const l5Label = [
+              configurationScope.available ? "Config" : "",
+              sdkAdapters.length > 0 ? "SDK meta" : "",
+            ]
+              .filter(Boolean)
+              .join(" / ");
             return (
               <article
                 className="pack-card"
@@ -211,8 +227,10 @@ export function DevicePackManager({
                       >
                         L4 {l4Label || t("IBIS/S-parameter")}
                       </span>
-                      <span className={caps.sdk ? "cap meta" : "cap no"}>
-                        L5 SDK Adapter
+                      <span
+                        className={caps.configuration ? "cap meta" : "cap no"}
+                      >
+                        L5 {l5Label || "Config"}
                       </span>
                       <span className="cap no">L6 Firmware</span>
                     </div>
@@ -237,23 +255,48 @@ export function DevicePackManager({
                       ? "已验证并嵌入工程"
                       : "Validated and embedded in project"}
                   </div>
-                  {sdkAdapters.length > 0 && (
-                    <button
-                      className="sdk-inspect-button"
-                      onClick={() =>
-                        setSdkTarget({
-                          packSha256: pack.sha256,
-                          packName: pack.pack.manifest.name,
-                          deviceName: device.name,
-                          adapters: sdkAdapters,
-                        })
-                      }
-                    >
-                      <FolderSearch />
-                      {language === "zh-CN"
-                        ? "匹配本地 SDK"
-                        : "Match local SDK"}
-                    </button>
+                  {(configurationScope.available || sdkAdapters.length > 0) && (
+                    <div className="pack-tool-actions">
+                      {configurationScope.available && (
+                        <button
+                          className="pack-tool-button config"
+                          onClick={() =>
+                            setConfigTarget({
+                              packSha256: pack.sha256,
+                              packName: pack.pack.manifest.name,
+                              deviceId: device.id,
+                              deviceName: device.name,
+                              alternateFunctionCount:
+                                configurationScope.alternateFunctionCount,
+                              bootPinCount: configurationScope.bootPinCount,
+                            })
+                          }
+                        >
+                          <ScanSearch />
+                          {language === "zh-CN"
+                            ? "检查器件配置"
+                            : "Check configuration"}
+                        </button>
+                      )}
+                      {sdkAdapters.length > 0 && (
+                        <button
+                          className="pack-tool-button sdk"
+                          onClick={() =>
+                            setSdkTarget({
+                              packSha256: pack.sha256,
+                              packName: pack.pack.manifest.name,
+                              deviceName: device.name,
+                              adapters: sdkAdapters,
+                            })
+                          }
+                        >
+                          <FolderSearch />
+                          {language === "zh-CN"
+                            ? "匹配本地 SDK"
+                            : "Match local SDK"}
+                        </button>
+                      )}
+                    </div>
                   )}
                 </div>
                 <DeviceUnitActions
@@ -277,6 +320,11 @@ export function DevicePackManager({
         target={sdkTarget}
         language={language}
         onClose={() => setSdkTarget(null)}
+      />
+      <DeviceConfigInspector
+        target={configTarget}
+        language={language}
+        onClose={() => setConfigTarget(null)}
       />
     </div>
   );

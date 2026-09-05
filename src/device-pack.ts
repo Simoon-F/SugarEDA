@@ -33,8 +33,11 @@ export function deviceCapabilities(
     },
     {
       level: 5,
-      code: "sdkAdapterMetadata",
-      available: device.sdkAdapterIds.length > 0,
+      code: "deviceConfiguration",
+      available:
+        device.sdkAdapterIds.length > 0 ||
+        device.alternateFunctions.length > 0 ||
+        device.rules.some((rule) => rule.kind === "bootConfiguration"),
     },
     { level: 6, code: "firmwareSimulation", available: false },
   ];

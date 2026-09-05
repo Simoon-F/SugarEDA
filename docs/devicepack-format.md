@@ -4,14 +4,14 @@ DevicePack 是 SugarEDA 的厂商无关、纯数据器件包。文件名使用 `
 
 ## 能力等级
 
-| 等级 | 含义                          | P3 第一阶段                   |
-| ---- | ----------------------------- | ----------------------------- |
-| L1   | 符号、引脚、变体和封装映射    | 已实现                        |
-| L2   | 电气元数据和 ERC              | 已实现                        |
-| L3   | SPICE 模型和端口绑定          | 已实现安全内嵌文本模型        |
-| L4   | IBIS/S 参数信号完整性         | 仅接口元数据，无求解器        |
-| L5   | SDK、PinMux、Device Tree 检查 | 仅 Adapter 元数据，不解析 SDK |
-| L6   | 固件或操作系统功能仿真        | 未实现                        |
+| 等级 | 含义                          | P3 第一阶段                                        |
+| ---- | ----------------------------- | -------------------------------------------------- |
+| L1   | 符号、引脚、变体和封装映射    | 已实现                                             |
+| L2   | 电气元数据和 ERC              | 已实现                                             |
+| L3   | SPICE 模型和端口绑定          | 已实现安全内嵌文本模型                             |
+| L4   | IBIS/S 参数信号完整性         | 仅接口元数据，无求解器                             |
+| L5   | SDK、PinMux、Device Tree 检查 | Adapter 路径发现与受限配置 IR 检查；不解析 SDK/DTS |
+| L6   | 固件或操作系统功能仿真        | 未实现                                             |
 
 能力按器件独立计算。只有符号的器件只显示“可画原理图”，不能描述为可完整仿真。SDK 元数据不代表存在电气仿真模型。
 
@@ -48,7 +48,7 @@ DevicePack 是 SugarEDA 的厂商无关、纯数据器件包。文件名使用 `
 - `electricalType`：`passive`、`input`、`output`、`bidirectional`、`openDrain`、`openCollector`、`powerInput`、`powerOutput`、`noConnect`。
 - `direction`：`input`、`output`、`bidirectional`、`passive`、`power`、`notConnected`。
 - 电压域包含 `id`、`name`、`minVoltage`、`maxVoltage`。
-- 复用功能把一个 `pinId` 映射到 GPIO、UART、SPI、I2C 等名称；本阶段只存储，不解析 SDK。
+- 复用功能把一个 `pinId` 映射到 GPIO、UART、SPI、I2C 等名称；受限 `.device-config.json` 可以引用这些名称做一致性检查，但不会解析 SDK。
 - 差分对包含 `id`、`positivePinId`、`negativePinId`。
 - 规则包含 `id`、`kind`、`pinIds` 和可选 `message`。`kind` 为 `required`、`allowFloating`、`powerInput`、`powerOutput`、`bootConfiguration`。
 
@@ -96,6 +96,8 @@ SDK Adapter 包含 `id`、`sdkType`、`versionRequirement`、安全的相对 `lo
 
 用户可以在器件包管理器中显式选择一个本地 SDK 根目录进行只读结构匹配。匹配器只支持作为完整路径段的 `*` 和受限文件后缀形式 `*.ext`，限制最多访问 10,000 个目录项、每个模式返回 128 个结果，并忽略逃出所选根目录的符号链接。它不读取 SDK 文件内容、不执行工具、不推断版本，也不把本地绝对路径写入 `.sugeda`。结果中的 `pathMetadataOnly` 仅表示目录结构与元数据模式匹配，不能描述为 SDK 兼容或 Device Tree 配置已经验证。
 
+具有 `alternateFunctions` 或 `bootConfiguration` 规则的器件还可以检查厂商无关的 `.device-config.json`。该受限 IR 绑定精确器件包版本，只包含 PinMux 和启动绑带声明；Rust 会验证引脚、可选功能、重复外设信号及启动配置覆盖。详见 [P3 第四阶段器件配置检查](p3-phase4-device-configuration.md)。配置和本地路径都不持久化，因此工程 schema 仍为 v4。
+
 文档仅保存 `kind`、`title`、HTTP(S) `sourceUrl`、`revision` 和 `license` 来源元数据，导入时不下载 URL。
 
 ## 限制与冲突策略
@@ -122,7 +124,7 @@ SDK 描述寄存器、驱动、板级配置、PinMux 和构建产物；SPICE 描
 
 ## 未来厂商接入
 
-未来如从获授权来源制作 RK3576 包，它也只是普通 DevicePack，架构中不会硬编码 RK3576。L1/L2 数据继续嵌入和版本化；SDK Adapter 可在未来只读匹配用户本地安装的 SDK，并输出 PinMux/Device Tree 诊断，但不捆绑 SDK；专用 IBIS 后端可通过稳定 L4 接口消费获授权模型。任何路径都不能声称 ngspice 可运行 RK3576 固件。
+未来如从获授权来源制作 RK3576 包，它也只是普通 DevicePack，架构中不会硬编码 RK3576。L1/L2 数据继续嵌入和版本化；SDK Adapter 可在未来把用户本地、获授权 SDK 或 Device Tree 转换为受限配置 IR，再由通用检查器输出 PinMux/启动诊断，但不捆绑 SDK；专用 IBIS 后端可通过稳定 L4 接口消费获授权模型。任何路径都不能声称 ngspice 可运行 RK3576 固件。
 
 ## 来源、许可证与再分发
 

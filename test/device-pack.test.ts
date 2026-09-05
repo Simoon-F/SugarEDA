@@ -74,4 +74,19 @@ describe("DevicePack capabilities", () => {
     for (const term of ["sugareda", "test-mcu", "fictional chip", "gpio", "a1"])
       expect(text).toContain(term);
   });
+
+  it("exposes L5 configuration checks from PinMux metadata without an SDK", () => {
+    const pack = embedded("spice");
+    pack.pack.devices[0].alternateFunctions = [
+      { pinId: "pa0", functions: ["UART1_TX"] },
+    ];
+    const capability = deviceCapabilities(pack, "chip").find(
+      (item) => item.level === 5,
+    );
+    expect(capability).toEqual({
+      level: 5,
+      code: "deviceConfiguration",
+      available: true,
+    });
+  });
 });

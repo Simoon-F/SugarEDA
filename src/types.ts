@@ -220,6 +220,23 @@ export type SdkAdapterReport = {
   patterns: { pattern: string; matches: string[] }[];
   issues: SdkAdapterIssue[];
 };
+export type DeviceConfigIssue = {
+  code: string;
+  severity: "error" | "warning" | "info";
+  pinId?: string | null;
+  messageZh: string;
+  messageEn: string;
+};
+export type DeviceConfigReport = {
+  valid: boolean;
+  formatVersion: number;
+  configId: string;
+  configName: string;
+  packSha256: string;
+  deviceId: string;
+  checkedAssignments: number;
+  issues: DeviceConfigIssue[];
+};
 export type Wire = { id: string; points: Point[] };
 export type NetLabel = { id: string; name: string; position: Point };
 export type Analysis =

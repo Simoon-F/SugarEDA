@@ -24,4 +24,4 @@
 - `sdk-adapter-inspector.tsx`：目录选择和结果展示，不实现匹配算法。
 - `device-pack-manager.tsx`：只负责打开检查器并传递所选器件的 adapter 元数据。
 
-后续 PinMux/Device Tree 检查必须建立独立的、只读解析器和标准化诊断 IR，不得把解析逻辑加入本模块，也不得把路径匹配结果提升为“SDK 已兼容”。
+PinMux/启动配置检查现已通过独立的受限 JSON IR 实现，见 [P3 第四阶段器件配置检查](p3-phase4-device-configuration.md)。未来 Device Tree 或厂商 SDK 解析器只能把输入转换为该 IR，不得把解析逻辑加入本模块，也不得把路径匹配结果提升为“SDK 已兼容”。

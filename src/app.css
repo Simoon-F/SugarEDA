@@ -344,21 +344,33 @@ body.component-dragging {
 .trust-note svg {
   width: 13px;
 }
-.sdk-inspect-button {
+.pack-tool-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+  margin-top: 8px;
+}
+.pack-tool-button {
   height: 28px;
   display: inline-flex;
   align-items: center;
   gap: 5px;
-  margin-top: 8px;
   padding: 0 8px;
-  color: #7a520f;
-  background: #fff8e9;
-  border: 1px solid #eddfbd;
   border-radius: 7px;
   font-size: 10px;
   font-weight: 650;
 }
-.sdk-inspect-button svg {
+.pack-tool-button.sdk {
+  color: #7a520f;
+  background: #fff8e9;
+  border: 1px solid #eddfbd;
+}
+.pack-tool-button.config {
+  color: #176e49;
+  background: #edf8f2;
+  border: 1px solid #cbe8d8;
+}
+.pack-tool-button svg {
   width: 13px;
 }
 .unit-actions {

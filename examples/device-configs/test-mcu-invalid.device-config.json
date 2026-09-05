@@ -1,0 +1,20 @@
+{
+  "formatVersion": 1,
+  "id": "org.sugareda.test.mcu.invalid-config",
+  "name": "SugarEDA Test MCU invalid configuration",
+  "source": "SugarEDA self-contained negative test fixture; fictional data only",
+  "license": "CC0-1.0",
+  "target": {
+    "packId": "org.sugareda.test.mcu",
+    "packVersion": "1.0.0",
+    "deviceId": "stmcu24",
+    "variantId": "industrial"
+  },
+  "pinMux": [
+    { "pinId": "pa0", "function": "I2C1_SCL" },
+    { "pinId": "pa2", "function": "I2C1_SCL" },
+    { "pinId": "pa1", "function": "SPI9_MISO" },
+    { "pinId": "px99", "function": "GPIO_X99" }
+  ],
+  "bootStraps": []
+}
