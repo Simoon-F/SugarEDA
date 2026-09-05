@@ -602,8 +602,11 @@ export function SchematicCanvas({
           e.shiftKey ? [...new Set([...selectedIds, wire.id])] : [wire.id],
         );
       else {
-        if (!e.shiftKey) onSelect([]);
-        setBox({ start: screen, end: screen });
+        if (e.shiftKey) setBox({ start: screen, end: screen });
+        else {
+          onSelect([]);
+          setPanStart({ screen, pan: view.pan });
+        }
       }
     }
   };
@@ -695,12 +698,18 @@ export function SchematicCanvas({
       setDrag(null);
     }
     if (panStart) {
+      const distance = Math.hypot(
+        screen.x - panStart.screen.x,
+        screen.y - panStart.screen.y,
+      );
       const finalPan = {
         x: panStart.pan.x + screen.x - panStart.screen.x,
         y: panStart.pan.y + screen.y - panStart.screen.y,
       };
-      setView((currentView) => ({ ...currentView, pan: finalPan }));
-      onView(view.zoom, finalPan);
+      if (distance > 2) {
+        setView((currentView) => ({ ...currentView, pan: finalPan }));
+        onView(view.zoom, finalPan);
+      } else setView((currentView) => ({ ...currentView, pan: panStart.pan }));
       setPanStart(null);
     }
     if (box) {
@@ -709,14 +718,17 @@ export function SchematicCanvas({
         y1 = Math.min(box.start.y, screen.y),
         y2 = Math.max(box.start.y, screen.y);
       if (x2 - x1 > 4 || y2 - y1 > 4)
-        onSelect(
-          project.sheets[0].components
-            .filter((c) => {
-              const p = toScreen(c.position);
-              return p.x >= x1 && p.x <= x2 && p.y >= y1 && p.y <= y2;
-            })
-            .map((c) => c.id),
-        );
+        onSelect([
+          ...new Set([
+            ...selectedIds,
+            ...project.sheets[0].components
+              .filter((c) => {
+                const p = toScreen(c.position);
+                return p.x >= x1 && p.x <= x2 && p.y >= y1 && p.y <= y2;
+              })
+              .map((c) => c.id),
+          ]),
+        ]);
       setBox(null);
     }
     if (canvas.current?.hasPointerCapture(e.pointerId))
@@ -795,7 +807,7 @@ export function SchematicCanvas({
   return (
     <div
       ref={host}
-      className={`canvas-host tool-${placement ? "place" : tool}`}
+      className={`canvas-host tool-${placement ? "place" : tool}${panStart ? " is-panning" : ""}`}
       onDrop={drop}
       onDragOver={(e) => {
         e.preventDefault();

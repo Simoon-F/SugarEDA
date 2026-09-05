@@ -544,6 +544,12 @@ body.component-dragging {
   height: 100%;
   touch-action: none;
 }
+.tool-select canvas {
+  cursor: grab;
+}
+.canvas-host.is-panning canvas {
+  cursor: grabbing;
+}
 .tool-wire canvas {
   cursor: crosshair;
 }

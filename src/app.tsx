@@ -997,7 +997,7 @@ function App() {
                       : "PLACE · Click canvas, Esc to cancel"
                     : sheet.wires.some((wire) => selected.includes(wire.id))
                       ? t("SELECT · Drag wire handles to reshape")
-                      : t("SELECT · Drag to move, space to pan")}
+                      : t("SELECT · Drag canvas to pan, Shift-drag to select")}
               </span>
             </div>
           </TooltipProvider>

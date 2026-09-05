@@ -57,7 +57,8 @@ const zh: Dictionary = {
   "Rotate 90°": "旋转 90°",
   "Delete selection": "删除所选",
   "WIRE · Click two endpoints": "导线 · 点击两个端点，Tab 切换转角",
-  "SELECT · Drag to move, space to pan": "选择 · 拖动元件，按空格平移画布",
+  "SELECT · Drag canvas to pan, Shift-drag to select":
+    "选择 · 拖动画板平移，Shift 拖动框选",
   "SELECT · Drag wire handles to reshape": "选择 · 拖动导线方块调整路径",
   INSPECTOR: "属性",
   "NO SELECTION": "未选择",
