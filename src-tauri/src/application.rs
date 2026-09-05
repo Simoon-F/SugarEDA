@@ -205,7 +205,30 @@ impl Workspace {
                 ));
             }
             EditorCommand::MoveComponent { id, position } => {
-                self.component_mut(id)?.position = position
+                let sheet = &mut self.project.sheets[0];
+                let component = sheet
+                    .components
+                    .iter_mut()
+                    .find(|component| component.id == id)
+                    .ok_or_else(|| format!("Component {id} no longer exists"))?;
+                let old_position = component.position;
+                let attached_pins = if component.kind == ComponentKind::NetLabel {
+                    vec![]
+                } else {
+                    component
+                        .pins
+                        .iter()
+                        .map(|pin| absolute_pin(component.position, component.rotation, pin.offset))
+                        .collect()
+                };
+                component.position = position;
+                let delta = Point {
+                    x: position.x - old_position.x,
+                    y: position.y - old_position.y,
+                };
+                for wire in &mut sheet.wires {
+                    wire.points = move_wire_with_component(&wire.points, &attached_pins, delta);
+                }
             }
             EditorCommand::UpdateComponent {
                 id,
@@ -345,6 +368,130 @@ fn validate_wire_points(points: &[Point]) -> Result<(), String> {
     Ok(())
 }
 
+fn same_point(a: Point, b: Point) -> bool {
+    (a.x - b.x).abs() < 0.001 && (a.y - b.y).abs() < 0.001
+}
+
+fn absolute_pin(position: Point, rotation: i32, offset: Point) -> Point {
+    let rotated = match rotation.rem_euclid(360) {
+        90 => Point {
+            x: -offset.y,
+            y: offset.x,
+        },
+        180 => Point {
+            x: -offset.x,
+            y: -offset.y,
+        },
+        270 => Point {
+            x: offset.y,
+            y: -offset.x,
+        },
+        _ => offset,
+    };
+    Point {
+        x: position.x + rotated.x,
+        y: position.y + rotated.y,
+    }
+}
+
+fn simplify_wire(points: Vec<Point>) -> Vec<Point> {
+    let mut simplified: Vec<Point> = vec![];
+    for point in points {
+        if simplified
+            .last()
+            .is_some_and(|last| same_point(*last, point))
+        {
+            continue;
+        }
+        while simplified.len() >= 2 {
+            let a = simplified[simplified.len() - 2];
+            let b = simplified[simplified.len() - 1];
+            let vertical = (a.x - b.x).abs() < 0.001 && (b.x - point.x).abs() < 0.001;
+            let horizontal = (a.y - b.y).abs() < 0.001 && (b.y - point.y).abs() < 0.001;
+            if !vertical && !horizontal {
+                break;
+            }
+            simplified.pop();
+        }
+        simplified.push(point);
+    }
+    simplified
+}
+
+fn move_wire_endpoint(points: &[Point], start: bool, target: Point) -> Vec<Point> {
+    if points.len() < 2 {
+        return points.to_vec();
+    }
+    let terminal = if start {
+        points[0]
+    } else {
+        points[points.len() - 1]
+    };
+    let neighbor = if start {
+        points[1]
+    } else {
+        points[points.len() - 2]
+    };
+    let horizontal = (terminal.y - neighbor.y).abs() < 0.001;
+    let corner = if horizontal {
+        Point {
+            x: neighbor.x,
+            y: target.y,
+        }
+    } else {
+        Point {
+            x: target.x,
+            y: neighbor.y,
+        }
+    };
+    let mut moved = if start {
+        vec![target, corner, neighbor]
+    } else {
+        points[..points.len() - 2].to_vec()
+    };
+    if start {
+        moved.extend_from_slice(&points[2..]);
+    } else {
+        moved.extend([neighbor, corner, target]);
+    }
+    let simplified = simplify_wire(moved);
+    if simplified.len() >= 2 {
+        simplified
+    } else {
+        points.to_vec()
+    }
+}
+
+fn move_wire_with_component(points: &[Point], pins: &[Point], delta: Point) -> Vec<Point> {
+    if points.len() < 2 {
+        return points.to_vec();
+    }
+    let start = points[0];
+    let end = points[points.len() - 1];
+    let mut moved = points.to_vec();
+    if pins.iter().any(|pin| same_point(*pin, start)) {
+        moved = move_wire_endpoint(
+            &moved,
+            true,
+            Point {
+                x: start.x + delta.x,
+                y: start.y + delta.y,
+            },
+        );
+    }
+    if pins.iter().any(|pin| same_point(*pin, end)) {
+        moved = move_wire_endpoint(
+            &moved,
+            false,
+            Point {
+                x: end.x + delta.x,
+                y: end.y + delta.y,
+            },
+        );
+    }
+    moved
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -385,5 +532,42 @@ mod tests {
         assert_eq!(w.project.sheets[0].wires[0].points.len(), 4);
         assert!(w.undo());
         assert_eq!(w.project.sheets[0].wires[0].points.len(), 2);
+    }
+
+    #[test]
+    fn moving_a_component_rubber_bands_attached_wires_and_undoes_together() {
+        let mut w = Workspace::new(Project::blank("x"));
+        w.apply(EditorCommand::AddComponent {
+            kind: ComponentKind::Resistor,
+            position: Point { x: 100., y: 100. },
+        })
+        .unwrap();
+        let component_id = w.project.sheets[0].components[0].id;
+        w.apply(EditorCommand::AddWire {
+            points: vec![Point { x: 60., y: 100. }, Point { x: 0., y: 100. }],
+        })
+        .unwrap();
+        w.apply(EditorCommand::MoveComponent {
+            id: component_id,
+            position: Point { x: 120., y: 140. },
+        })
+        .unwrap();
+        assert_eq!(
+            w.project.sheets[0].wires[0].points,
+            vec![
+                Point { x: 80., y: 140. },
+                Point { x: 0., y: 140. },
+                Point { x: 0., y: 100. },
+            ]
+        );
+        assert!(w.undo());
+        assert_eq!(
+            w.project.sheets[0].components[0].position,
+            Point { x: 100., y: 100. }
+        );
+        assert_eq!(
+            w.project.sheets[0].wires[0].points,
+            vec![Point { x: 60., y: 100. }, Point { x: 0., y: 100. }]
+        );
     }
 }

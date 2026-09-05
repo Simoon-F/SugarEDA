@@ -14,6 +14,25 @@ use std::{
 };
 use thiserror::Error;
 
+#[cfg(windows)]
+use std::os::windows::process::CommandExt;
+
+#[cfg(windows)]
+const CREATE_NO_WINDOW: u32 = 0x0800_0000;
+
+fn background_command(executable: &Path) -> Command {
+    #[cfg(windows)]
+    {
+        let mut command = Command::new(executable);
+        command.creation_flags(CREATE_NO_WINDOW);
+        command
+    }
+    #[cfg(not(windows))]
+    {
+        Command::new(executable)
+    }
+}
+
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct BackendStatus {
@@ -141,7 +160,7 @@ pub fn bundled_executable(resource_dir: &Path) -> Option<PathBuf> {
 impl SimulationBackend for NgSpiceBackend {
     fn status(&self, configured_path: Option<&str>) -> BackendStatus {
         let executable = self.executable(configured_path);
-        match Command::new(&executable)
+        match background_command(&executable)
             .arg("--version")
             .stdout(Stdio::piped())
             .stderr(Stdio::piped())
@@ -207,7 +226,7 @@ impl SimulationBackend for NgSpiceBackend {
         let raw = dir.path().join("result.raw");
         let log = dir.path().join("ngspice.log");
         fs::write(&circuit, instrument_netlist(netlist, signals)?)?;
-        let child = Command::new(&executable)
+        let child = background_command(&executable)
             .current_dir(dir.path())
             .arg("-n")
             .arg("-b")

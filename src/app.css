@@ -687,6 +687,10 @@ body.component-dragging {
   letter-spacing: 0;
   box-shadow: var(--shadow-raised);
 }
+.property-form input {
+  width: 100%;
+  min-width: 0;
+}
 .property-form input:focus,
 .simulation-config input:focus {
   outline: 2px solid rgb(40 105 223 / 16%);
@@ -709,8 +713,70 @@ input.invalid {
 }
 .coordinate-row {
   display: grid;
-  grid-template-columns: 1fr 1fr;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 8px;
+}
+.coordinate-row label {
+  min-width: 0;
+  margin: 0;
+}
+.coordinate-row label > span {
+  color: rgb(32 36 43 / 48%);
+}
+.coordinate-row input[readonly] {
+  color: rgb(32 36 43 / 68%);
+  background: var(--panel);
+  box-shadow: none;
+}
+.property-save {
+  width: 100%;
+  height: 38px;
+  margin: 14px 0 16px;
+  padding: 0 10px;
+  display: grid;
+  grid-template-columns: 16px 1fr auto;
+  align-items: center;
+  gap: 8px;
+  border: 1px solid var(--orange-hi);
+  border-radius: 10px;
+  background: var(--orange);
+  color: white;
+  cursor: pointer;
+  box-shadow: 0 2px 5px rgb(40 105 223 / 20%);
+  font-size: var(--font-body);
+  font-weight: 700;
+  text-align: left;
+}
+.property-save:hover:not(:disabled) {
+  background: var(--orange-hi);
+}
+.property-save:focus-visible {
+  outline: 2px solid rgb(40 105 223 / 24%);
+  outline-offset: 2px;
+}
+.property-save:disabled {
+  color: rgb(32 36 43 / 46%);
+  background: var(--panel);
+  border-color: var(--line-dark);
+  box-shadow: none;
+  cursor: default;
+}
+.property-save svg,
+.property-action svg {
+  width: 15px;
+  height: 15px;
+}
+.property-save kbd {
+  color: rgb(255 255 255 / 72%);
+  font-size: var(--font-micro);
+}
+.property-save:disabled kbd {
+  color: rgb(32 36 43 / 36%);
+}
+.geometry-section {
+  display: grid;
+  gap: 10px;
+  padding-bottom: 16px;
 }
 .property-action {
   width: 100%;
@@ -718,16 +784,29 @@ input.invalid {
   border: 1px solid var(--line-dark);
   border-radius: 10px;
   background: var(--surface-raised);
-  text-align: left;
   padding: 0 9px;
+  display: grid;
+  grid-template-columns: 16px 1fr auto;
+  align-items: center;
+  gap: 7px;
+  text-align: left;
   font-size: var(--font-caption);
+  cursor: pointer;
 }
 .property-action:hover {
   background: var(--orange-soft);
+  border-color: rgb(40 105 223 / 24%);
 }
-.property-action span {
-  float: right;
+.property-action output {
   color: var(--orange);
+  font-family: "SFMono-Regular", monospace;
+}
+.pins-section {
+  padding-top: 12px;
+  border-top: 1px solid var(--line);
+}
+.pins-section h3 {
+  margin: 0 0 8px;
 }
 .pin-row {
   display: grid;
@@ -736,14 +815,19 @@ input.invalid {
     var(--font-caption) "SFMono-Regular",
     monospace;
   color: rgb(32 36 43 / 78%);
-  padding: 5px 0;
+  min-height: 28px;
+  padding: 6px 7px;
+  align-items: center;
+  border-radius: 7px;
+}
+.pin-row:nth-child(even) {
+  background: rgb(32 36 43 / 3%);
 }
 .pin-row i {
   width: 6px;
   height: 6px;
   background: var(--teal);
   border-radius: 50%;
-  margin-top: 3px;
 }
 .pin-row span {
   color: var(--text-muted);

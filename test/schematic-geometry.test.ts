@@ -3,6 +3,8 @@ import { createBlankSnapshot } from "@/blank";
 import {
   nearestElectricalPoint,
   moveOrthogonalSegment,
+  moveWireEndpoint,
+  moveWireWithComponent,
   orthogonalRoute,
   pinPosition,
   samePoint,
@@ -104,6 +106,38 @@ describe("schematic geometry", () => {
       { x: 40, y: 0 },
       { x: 40, y: 60 },
       { x: 80, y: 60 },
+    ]);
+  });
+
+  it("moves and reroutes a wire endpoint for reconnection", () => {
+    expect(
+      moveWireEndpoint(
+        [
+          { x: 0, y: 0 },
+          { x: 80, y: 0 },
+        ],
+        "start",
+        { x: 20, y: 40 },
+      ),
+    ).toEqual([
+      { x: 20, y: 40 },
+      { x: 80, y: 40 },
+      { x: 80, y: 0 },
+    ]);
+  });
+
+  it("rubber-bands an attached endpoint when its component moves", () => {
+    const project = geometryProject();
+    const source = project.sheets[0].components[0];
+    expect(
+      moveWireWithComponent(project.sheets[0].wires[0].points, source, {
+        x: 220,
+        y: 240,
+      }),
+    ).toEqual([
+      { x: 220, y: 210 },
+      { x: 300, y: 210 },
+      { x: 300, y: 170 },
     ]);
   });
 });

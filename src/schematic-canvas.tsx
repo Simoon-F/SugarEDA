@@ -12,11 +12,14 @@ import {
   GRID,
   nearestElectricalPoint,
   moveOrthogonalSegment,
+  moveWireEndpoint,
+  moveWireWithComponent,
   orthogonalRoute,
   pinPosition,
   snapPoint,
   wireBendFromPoints,
   type WireBend,
+  type WireEndpoint,
 } from "./schematic-geometry";
 
 type Props = {
@@ -70,6 +73,12 @@ export function SchematicCanvas({
     startScreen: Point;
     points: Point[];
   } | null>(null);
+  const [wireEndpointDrag, setWireEndpointDrag] = useState<{
+    id: string;
+    endpoint: WireEndpoint;
+    startScreen: Point;
+    points: Point[];
+  } | null>(null);
   const [pointer, setPointer] = useState<Point>({ x: 0, y: 0 });
   const [box, setBox] = useState<{ start: Point; end: Point } | null>(null);
   const space = useRef(false);
@@ -116,12 +125,13 @@ export function SchematicCanvas({
     [view],
   );
   const electricalSnap = useCallback(
-    (world: Point, ignoredComponentId?: string) =>
+    (world: Point, ignoredComponentId?: string, ignoredWireId?: string) =>
       nearestElectricalPoint(
         project,
         world,
         16 / view.zoom,
         ignoredComponentId,
+        ignoredWireId,
       ) ?? snapPoint(world),
     [project, view.zoom],
   );
@@ -333,15 +343,45 @@ export function SchematicCanvas({
     ctx.lineWidth = Math.max(1.25, 1.5 * view.zoom);
     ctx.lineJoin = "miter";
     const current = toWorld(pointer);
+    const draggedComponent = drag
+      ? project.sheets[0].components.find(
+          (component) => component.id === drag.id,
+        )
+      : undefined;
+    const draggedPosition =
+      drag && draggedComponent
+        ? componentSnap(
+            draggedComponent.kind,
+            {
+              x: drag.origin.x + current.x - drag.start.x,
+              y: drag.origin.y + current.y - drag.start.y,
+            },
+            draggedComponent.id,
+          )
+        : undefined;
     for (const wire of project.sheets[0].wires) {
-      const wirePoints =
-        wireSegmentDrag?.id === wire.id
-          ? moveOrthogonalSegment(
-              wireSegmentDrag.points,
-              wireSegmentDrag.index,
-              current,
+      const attachedPoints =
+        draggedComponent && draggedPosition
+          ? moveWireWithComponent(
+              wire.points,
+              draggedComponent,
+              draggedPosition,
             )
           : wire.points;
+      const wirePoints =
+        wireEndpointDrag?.id === wire.id
+          ? moveWireEndpoint(
+              wireEndpointDrag.points,
+              wireEndpointDrag.endpoint,
+              electricalSnap(current, undefined, wire.id),
+            )
+          : wireSegmentDrag?.id === wire.id
+            ? moveOrthogonalSegment(
+                wireSegmentDrag.points,
+                wireSegmentDrag.index,
+                current,
+              )
+            : attachedPoints;
       ctx.beginPath();
       wirePoints.forEach((p, i) => {
         const s = toScreen(p);
@@ -363,16 +403,7 @@ export function SchematicCanvas({
       ctx.fillText(label.name, s.x + 6, s.y - 6);
     }
     for (const component of project.sheets[0].components) {
-      const rawDragPoint =
-        drag?.id === component.id
-          ? {
-              x: drag.origin.x + current.x - drag.start.x,
-              y: drag.origin.y + current.y - drag.start.y,
-            }
-          : undefined;
-      const dragPoint = rawDragPoint
-        ? componentSnap(component.kind, rawDragPoint, component.id)
-        : undefined;
+      const dragPoint = drag?.id === component.id ? draggedPosition : undefined;
       const displayedPosition = dragPoint ?? component.position;
       const disconnectedLabel =
         component.kind === "netLabel" &&
@@ -396,13 +427,19 @@ export function SchematicCanvas({
     }
     if (tool === "select" && selectedWire) {
       const points =
-        wireSegmentDrag?.id === selectedWire.id
-          ? moveOrthogonalSegment(
-              wireSegmentDrag.points,
-              wireSegmentDrag.index,
-              current,
+        wireEndpointDrag?.id === selectedWire.id
+          ? moveWireEndpoint(
+              wireEndpointDrag.points,
+              wireEndpointDrag.endpoint,
+              electricalSnap(current, undefined, selectedWire.id),
             )
-          : selectedWire.points;
+          : wireSegmentDrag?.id === selectedWire.id
+            ? moveOrthogonalSegment(
+                wireSegmentDrag.points,
+                wireSegmentDrag.index,
+                current,
+              )
+            : selectedWire.points;
       ctx.lineWidth = 1.5;
       for (let index = 0; index < points.length - 1; index += 1) {
         const a = toScreen(points[index]);
@@ -421,6 +458,19 @@ export function SchematicCanvas({
           ctx.lineTo(center.x, center.y + 2.5);
         }
         ctx.stroke();
+      }
+      for (const endpoint of [points[0], points[points.length - 1]]) {
+        const p = toScreen(endpoint);
+        ctx.beginPath();
+        ctx.fillStyle = "#ffffff";
+        ctx.strokeStyle = "#df6718";
+        ctx.arc(p.x, p.y, 6, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.stroke();
+        ctx.beginPath();
+        ctx.fillStyle = "#df6718";
+        ctx.arc(p.x, p.y, 2, 0, Math.PI * 2);
+        ctx.fill();
       }
     }
     if (wireStart) {
@@ -477,6 +527,7 @@ export function SchematicCanvas({
     selectedWire,
     tool,
     wireSegmentDrag,
+    wireEndpointDrag,
   ]);
   drawRef.current = draw;
   useEffect(draw, [draw]);
@@ -545,6 +596,14 @@ export function SchematicCanvas({
     }
     return -1;
   };
+  const hitWireEndpoint = (screen: Point, wire: Wire): WireEndpoint | null => {
+    const start = toScreen(wire.points[0]);
+    const end = toScreen(wire.points[wire.points.length - 1]);
+    if (Math.hypot(screen.x - start.x, screen.y - start.y) <= 10)
+      return "start";
+    if (Math.hypot(screen.x - end.x, screen.y - end.y) <= 10) return "end";
+    return null;
+  };
   const pointerDown = (e: React.PointerEvent) => {
     const screen = eventPoint(e),
       world = toWorld(screen);
@@ -580,6 +639,16 @@ export function SchematicCanvas({
       return;
     }
     if (selectedWire) {
+      const endpoint = hitWireEndpoint(screen, selectedWire);
+      if (endpoint) {
+        setWireEndpointDrag({
+          id: selectedWire.id,
+          endpoint,
+          startScreen: screen,
+          points: selectedWire.points,
+        });
+        return;
+      }
       const segmentIndex = hitWireHandle(screen, selectedWire);
       if (segmentIndex >= 0) {
         setWireSegmentDrag({
@@ -649,6 +718,32 @@ export function SchematicCanvas({
     pendingPointer.current = null;
     setPointer(screen);
     onCursor(world);
+    if (wireEndpointDrag) {
+      if (
+        Math.hypot(
+          screen.x - wireEndpointDrag.startScreen.x,
+          screen.y - wireEndpointDrag.startScreen.y,
+        ) > 3
+      ) {
+        const wire = project.sheets[0].wires.find(
+          (item) => item.id === wireEndpointDrag.id,
+        );
+        const points = moveWireEndpoint(
+          wireEndpointDrag.points,
+          wireEndpointDrag.endpoint,
+          electricalSnap(world, undefined, wireEndpointDrag.id),
+        );
+        if (
+          wire &&
+          (points.length !== wire.points.length ||
+            points.some(
+              (point, index) => !sameScreenPoint(point, wire.points[index]),
+            ))
+        )
+          onCommand({ action: "updateWire", id: wireEndpointDrag.id, points });
+      }
+      setWireEndpointDrag(null);
+    }
     if (wireSegmentDrag) {
       if (
         Math.hypot(
@@ -742,6 +837,7 @@ export function SchematicCanvas({
     pendingPointer.current = null;
     setDrag(null);
     setWireSegmentDrag(null);
+    setWireEndpointDrag(null);
     setPanStart(null);
     setBox(null);
     if (canvas.current?.hasPointerCapture(e.pointerId))
@@ -876,7 +972,7 @@ export function SchematicCanvas({
             V → H
           </button>
           <span className="wire-edit-hint">
-            {t("Drag a square handle to customize")}
+            {t("Drag endpoints to reconnect or square handles to reshape")}
           </span>
         </div>
       )}

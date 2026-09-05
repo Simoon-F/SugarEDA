@@ -112,6 +112,57 @@ export function moveOrthogonalSegment(
   return simplifyOrthogonalPoints(result);
 }
 
+export type WireEndpoint = "start" | "end";
+
+/** Move a wire endpoint while preserving the direction of its terminal segment. */
+export function moveWireEndpoint(
+  points: Point[],
+  endpoint: WireEndpoint,
+  target: Point,
+): Point[] {
+  if (points.length < 2) return points;
+  const moveStart = endpoint === "start";
+  const terminal = moveStart ? points[0] : points[points.length - 1];
+  const neighbor = moveStart ? points[1] : points[points.length - 2];
+  const horizontal = Math.abs(terminal.y - neighbor.y) < 0.001;
+  const bend: WireBend = horizontal ? "horizontal-first" : "vertical-first";
+  const terminalRoute = orthogonalRoute(target, neighbor, bend);
+  const route = terminalRoute.length ? terminalRoute : [target];
+  const moved = moveStart
+    ? [...route, ...points.slice(2)]
+    : [...points.slice(0, -2), ...route.reverse()];
+  const simplified = simplifyOrthogonalPoints(moved);
+  return simplified.length >= 2 ? simplified : points;
+}
+
+/** Rubber-band wire endpoints that are attached to a moving component's pins. */
+export function moveWireWithComponent(
+  points: Point[],
+  component: Component,
+  position: Point,
+): Point[] {
+  if (component.kind === "netLabel" || points.length < 2) return points;
+  const pins = component.pins.map((pin) => pinPosition(component, pin.offset));
+  const delta = {
+    x: position.x - component.position.x,
+    y: position.y - component.position.y,
+  };
+  const start = points[0];
+  const end = points[points.length - 1];
+  let moved = points;
+  if (pins.some((pin) => samePoint(pin, start)))
+    moved = moveWireEndpoint(moved, "start", {
+      x: start.x + delta.x,
+      y: start.y + delta.y,
+    });
+  if (pins.some((pin) => samePoint(pin, end)))
+    moved = moveWireEndpoint(moved, "end", {
+      x: end.x + delta.x,
+      y: end.y + delta.y,
+    });
+  return moved;
+}
+
 export function wireBendFromPoints(points: Point[]): WireBend | null {
   if (points.length < 3) return null;
   const start = points[0];
@@ -138,6 +189,7 @@ export function nearestElectricalPoint(
   point: Point,
   maxDistance: number,
   ignoredComponentId?: string,
+  ignoredWireId?: string,
 ): Point | null {
   const sheet = project.sheets[0];
   if (!sheet) return null;
@@ -158,6 +210,7 @@ export function nearestElectricalPoint(
       consider(pinPosition(component, pin.offset));
   }
   for (const wire of sheet.wires) {
+    if (wire.id === ignoredWireId) continue;
     if (wire.points.length === 1) consider(wire.points[0]);
     for (let index = 1; index < wire.points.length; index += 1)
       consider(

@@ -6,6 +6,7 @@ import { createBlankSnapshot } from "./blank";
 import { SchematicCanvas } from "./schematic-canvas";
 import { Waveform } from "./waveform";
 import { SimulationConfig } from "./simulation-config";
+import { moveWireWithComponent } from "./schematic-geometry";
 import { useI18n } from "./i18n";
 import { Button } from "@/components/ui/button";
 import {
@@ -29,6 +30,7 @@ import {
   PackagePlus,
   Play,
   RotateCw,
+  Save,
   Square,
   Trash2,
 } from "lucide-react";
@@ -220,7 +222,15 @@ function App() {
         const c = next.project.sheets[0].components.find(
           (c) => c.id === command.id,
         );
-        if (c) c.position = command.position;
+        if (c) {
+          next.project.sheets[0].wires = next.project.sheets[0].wires.map(
+            (wire) => ({
+              ...wire,
+              points: moveWireWithComponent(wire.points, c, command.position),
+            }),
+          );
+          c.position = command.position;
+        }
       } else if (command.action === "updateComponent") {
         const c = next.project.sheets[0].components.find(
           (c) => c.id === command.id,
@@ -996,7 +1006,7 @@ function App() {
                       ? `放置 ${t(visibleLibrary.flatMap((group) => group.items).find((item) => item.kind === placement.kind && item.model?.modelName === placement.model?.modelName)?.name || placement.kind)} · 点击画布，Esc 取消`
                       : "PLACE · Click canvas, Esc to cancel"
                     : sheet.wires.some((wire) => selected.includes(wire.id))
-                      ? t("SELECT · Drag wire handles to reshape")
+                      ? t("SELECT · Drag wire endpoints or handles to reshape")
                       : t("SELECT · Drag canvas to pan, Shift-drag to select")}
               </span>
             </div>
@@ -1022,6 +1032,7 @@ function App() {
           </div>
           {selectedComponent ? (
             <ComponentInspector
+              key={selectedComponent.id}
               component={selectedComponent}
               onUpdate={(name, ref, value) =>
                 void command({
@@ -1241,10 +1252,23 @@ function ComponentInspector({
     setName(component.displayName);
     setRef(component.spiceRef);
     setValue(component.parameters.value || "");
-  }, [component]);
+  }, [component.displayName, component.parameters.value, component.spiceRef]);
   const valid = !/[;\n\r]/.test(value) && value.length <= 128;
+  const changed =
+    name !== component.displayName ||
+    ref !== component.spiceRef ||
+    value !== (component.parameters.value || "");
+  const save = () => {
+    if (valid && changed) onUpdate(name, ref, value);
+  };
   return (
-    <div className="property-form">
+    <form
+      className="property-form"
+      onSubmit={(event) => {
+        event.preventDefault();
+        save();
+      }}
+    >
       <div className="selection-banner">
         <span>{component.kind.replace(/([A-Z])/g, " $1")}</span>
         <b>
@@ -1255,11 +1279,7 @@ function ComponentInspector({
       </div>
       <label>
         {language === "zh-CN" ? "显示名称" : "DISPLAY NAME"}
-        <input
-          value={name}
-          onChange={(e) => setName(e.target.value)}
-          onBlur={() => onUpdate(name, ref, value)}
-        />
+        <input value={name} onChange={(e) => setName(e.target.value)} />
       </label>
       {component.kind !== "ground" && (
         <>
@@ -1270,7 +1290,6 @@ function ComponentInspector({
                 className={!ref ? "invalid" : ""}
                 value={ref}
                 onChange={(e) => setRef(e.target.value.toUpperCase())}
-                onBlur={() => onUpdate(name, ref, value)}
               />
             </label>
           )}
@@ -1296,7 +1315,6 @@ function ComponentInspector({
                 className={!valid ? "invalid" : ""}
                 value={value}
                 onChange={(e) => setValue(e.target.value)}
-                onBlur={() => valid && onUpdate(name, ref, value)}
               />
               {!valid && (
                 <small className="field-error">
@@ -1309,27 +1327,43 @@ function ComponentInspector({
           )}
         </>
       )}
-      <div className="coordinate-row">
-        <label>
-          X<input value={component.position.x} readOnly />
-        </label>
-        <label>
-          Y<input value={component.position.y} readOnly />
-        </label>
-      </div>
-      <button className="property-action" onClick={onRotate}>
-        ↻ {language === "zh-CN" ? "旋转 90°" : "Rotate 90°"}{" "}
-        <span>{component.rotation}°</span>
+      <button
+        className="property-save"
+        type="submit"
+        disabled={!valid || !changed}
+      >
+        <Save aria-hidden="true" />
+        <span>{language === "zh-CN" ? "保存参数" : "Save properties"}</span>
+        <kbd>{language === "zh-CN" ? "点击保存" : "Click to save"}</kbd>
       </button>
-      <h3>{language === "zh-CN" ? "引脚" : "PINS"}</h3>
-      {component.pins.map((pin) => (
-        <div className="pin-row" key={pin.id}>
-          <i />
-          {pin.id}
-          <span>{pin.name}</span>
+      <div className="geometry-section">
+        <div className="coordinate-row" aria-label="Component coordinates">
+          <label>
+            <span>X</span>
+            <input value={component.position.x} readOnly />
+          </label>
+          <label>
+            <span>Y</span>
+            <input value={component.position.y} readOnly />
+          </label>
         </div>
-      ))}
-    </div>
+        <button className="property-action" type="button" onClick={onRotate}>
+          <RotateCw aria-hidden="true" />
+          <span>{language === "zh-CN" ? "旋转 90°" : "Rotate 90°"}</span>
+          <output>{component.rotation}°</output>
+        </button>
+      </div>
+      <section className="pins-section">
+        <h3>{language === "zh-CN" ? "引脚" : "PINS"}</h3>
+        {component.pins.map((pin) => (
+          <div className="pin-row" key={pin.id}>
+            <i />
+            {pin.id}
+            <span>{pin.name}</span>
+          </div>
+        ))}
+      </section>
+    </form>
   );
 }
 export default App;

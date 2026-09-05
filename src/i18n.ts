@@ -53,13 +53,15 @@ const zh: Dictionary = {
   "Vertical then horizontal": "先竖后横",
   "Edit selected wire": "编辑所选导线",
   "Selected wire": "已选导线",
-  "Drag a square handle to customize": "拖动方块自定义",
+  "Drag endpoints to reconnect or square handles to reshape":
+    "拖动圆形端点重接，拖动方块调整路径",
   "Rotate 90°": "旋转 90°",
   "Delete selection": "删除所选",
   "WIRE · Click two endpoints": "导线 · 点击两个端点，Tab 切换转角",
   "SELECT · Drag canvas to pan, Shift-drag to select":
     "选择 · 拖动画板平移，Shift 拖动框选",
-  "SELECT · Drag wire handles to reshape": "选择 · 拖动导线方块调整路径",
+  "SELECT · Drag wire endpoints or handles to reshape":
+    "选择 · 拖动圆形端点重接，拖动方块调整路径",
   INSPECTOR: "属性",
   "NO SELECTION": "未选择",
   "Nothing selected": "未选择元件",
