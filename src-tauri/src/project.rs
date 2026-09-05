@@ -33,6 +33,8 @@ pub enum ProjectError {
     DevicePack(String),
     #[error("device component binding is missing or inconsistent")]
     DeviceBinding,
+    #[error("logical device instance is invalid: {0}")]
+    DeviceInstance(String),
 }
 
 pub fn load(path: &Path) -> Result<Project, ProjectError> {
@@ -43,7 +45,8 @@ pub fn load(path: &Path) -> Result<Project, ProjectError> {
     }
     let bytes = fs::read(path)?;
     let mut project: Project = serde_json::from_slice(&bytes)?;
-    if matches!(project.schema_version, 1 | 2) {
+    if matches!(project.schema_version, 1..=3) {
+        crate::device_instance::migrate_legacy_components(&mut project);
         project.schema_version = SCHEMA_VERSION;
     }
     validate(&project)?;
@@ -158,6 +161,7 @@ pub fn validate(project: &Project) -> Result<(), ProjectError> {
             }
         }
     }
+    crate::device_instance::validate(project).map_err(ProjectError::DeviceInstance)?;
     Ok(())
 }
 
@@ -197,12 +201,13 @@ mod tests {
         .unwrap();
         let mut project = Project::blank("device round trip");
         project.device_packs.push(embedded.clone());
-        let component = crate::device_pack::instantiate(
-            &project,
+        let component = crate::device_instance::place_unit(
+            &mut project,
             &embedded.sha256,
             "stmcu24",
             Some("industrial"),
             Some("core"),
+            None,
             crate::domain::Point { x: 300.0, y: 300.0 },
         )
         .unwrap();
@@ -214,13 +219,34 @@ mod tests {
         assert_eq!(reopened.device_packs, project.device_packs);
         assert_eq!(reopened.sheets[0].components[0].device, component.device);
         assert_eq!(reopened.sheets[0].components[0].pins, component.pins);
+        assert_eq!(reopened.device_instances, project.device_instances);
 
         let mut value = serde_json::to_value(Project::blank("legacy")).unwrap();
         value["schemaVersion"] = 2.into();
         value.as_object_mut().unwrap().remove("devicePacks");
+        value.as_object_mut().unwrap().remove("deviceInstances");
         std::fs::write(&path, serde_json::to_vec(&value).unwrap()).unwrap();
         let migrated = load(&path).unwrap();
         assert_eq!(migrated.schema_version, SCHEMA_VERSION);
         assert!(migrated.device_packs.is_empty());
+
+        let mut legacy_v3 = serde_json::to_value(&project).unwrap();
+        legacy_v3["schemaVersion"] = 3.into();
+        legacy_v3.as_object_mut().unwrap().remove("deviceInstances");
+        legacy_v3["sheets"][0]["components"][0]["device"]
+            .as_object_mut()
+            .unwrap()
+            .remove("logicalInstanceId");
+        std::fs::write(&path, serde_json::to_vec(&legacy_v3).unwrap()).unwrap();
+        let migrated_v3 = load(&path).unwrap();
+        assert_eq!(migrated_v3.device_instances.len(), 1);
+        assert_eq!(
+            migrated_v3.sheets[0].components[0]
+                .device
+                .as_ref()
+                .unwrap()
+                .logical_instance_id,
+            Some(migrated_v3.device_instances[0].id)
+        );
     }
 }

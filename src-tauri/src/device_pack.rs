@@ -998,6 +998,7 @@ pub fn instantiate(
         spice_ref: format!("{prefix}{sequence}"),
         model,
         device: Some(DeviceBinding {
+            logical_instance_id: None,
             pack_sha256: embedded.sha256.clone(),
             pack_id: embedded.pack.manifest.id.clone(),
             pack_version: embedded.pack.manifest.version.clone(),

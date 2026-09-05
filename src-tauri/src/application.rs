@@ -1,7 +1,7 @@
 use crate::device_pack::EmbeddedDevicePack;
 use crate::domain::{
-    component, modeled_component, Analysis, Component, ComponentKind, Point, Project,
-    SimulationProfile, SpiceLibrary, Wire,
+    component, modeled_component, Analysis, Component, ComponentKind, DeviceInstance, Point,
+    Project, SimulationProfile, SpiceLibrary, Wire,
 };
 use chrono::Utc;
 use serde::{Deserialize, Serialize};
@@ -47,6 +47,7 @@ pub enum EditorCommand {
         device_id: String,
         variant_id: Option<String>,
         unit_id: Option<String>,
+        logical_instance_id: Option<Uuid>,
         position: Point,
     },
     MoveComponent {
@@ -79,6 +80,7 @@ pub enum EditorCommand {
     InsertSelection {
         components: Vec<Component>,
         wires: Vec<Wire>,
+        device_instances: Vec<DeviceInstance>,
     },
     AddWire {
         points: Vec<Point>,
@@ -268,14 +270,16 @@ impl Workspace {
                 device_id,
                 variant_id,
                 unit_id,
+                logical_instance_id,
                 position,
             } => {
-                let component = crate::device_pack::instantiate(
-                    &self.project,
+                let component = crate::device_instance::place_unit(
+                    &mut self.project,
                     &pack_sha256,
                     &device_id,
                     variant_id.as_deref(),
                     unit_id.as_deref(),
+                    logical_instance_id,
                     position,
                 )?;
                 self.project.sheets[0].components.push(component);
@@ -374,9 +378,17 @@ impl Workspace {
                 spice_ref,
                 value,
             } => {
+                if !crate::device_instance::update_identity(
+                    &mut self.project,
+                    id,
+                    &display_name,
+                    &spice_ref,
+                )? {
+                    let target = self.component_mut(id)?;
+                    target.display_name = display_name;
+                    target.spice_ref = spice_ref;
+                }
                 let target = self.component_mut(id)?;
-                target.display_name = display_name;
-                target.spice_ref = spice_ref;
                 target.parameters.insert("value".into(), value);
             }
             EditorCommand::RotateComponent { id } => {
@@ -403,8 +415,13 @@ impl Workspace {
                 let sheet = &mut self.project.sheets[0];
                 sheet.components.retain(|c| !component_ids.contains(&c.id));
                 sheet.wires.retain(|w| !wire_ids.contains(&w.id));
+                crate::device_instance::remove_orphans(&mut self.project);
             }
-            EditorCommand::InsertSelection { components, wires } => {
+            EditorCommand::InsertSelection {
+                components,
+                wires,
+                device_instances,
+            } => {
                 let sheet = &mut self.project.sheets[0];
                 let mut ids: HashSet<_> = sheet
                     .components
@@ -412,12 +429,37 @@ impl Workspace {
                     .map(|component| component.id)
                     .chain(sheet.wires.iter().map(|wire| wire.id))
                     .collect();
-                let mut references: HashSet<_> = sheet
+                let mut references: std::collections::HashMap<_, _> = sheet
                     .components
                     .iter()
                     .filter(|component| !component.spice_ref.is_empty())
-                    .map(|component| component.spice_ref.to_ascii_lowercase())
+                    .map(|component| {
+                        (
+                            component.spice_ref.to_ascii_lowercase(),
+                            component
+                                .device
+                                .as_ref()
+                                .and_then(|binding| binding.logical_instance_id),
+                        )
+                    })
                     .collect();
+                let existing_instances: HashSet<_> = self
+                    .project
+                    .device_instances
+                    .iter()
+                    .map(|instance| instance.id)
+                    .collect();
+                let mut incoming_instances = HashSet::new();
+                for instance in &device_instances {
+                    if existing_instances.contains(&instance.id)
+                        || !incoming_instances.insert(instance.id)
+                    {
+                        return Err(format!(
+                            "Logical device instance {} already exists",
+                            instance.id
+                        ));
+                    }
+                }
                 for component in &components {
                     if !component.position.x.is_finite() || !component.position.y.is_finite() {
                         return Err("Component coordinates must be finite".into());
@@ -425,13 +467,22 @@ impl Workspace {
                     if !ids.insert(component.id) {
                         return Err(format!("Item {} already exists", component.id));
                     }
-                    if !component.spice_ref.is_empty()
-                        && !references.insert(component.spice_ref.to_ascii_lowercase())
-                    {
-                        return Err(format!(
-                            "Component reference '{}' already exists",
-                            component.spice_ref
-                        ));
+                    if !component.spice_ref.is_empty() {
+                        let key = component.spice_ref.to_ascii_lowercase();
+                        let owner = component
+                            .device
+                            .as_ref()
+                            .and_then(|binding| binding.logical_instance_id);
+                        if references
+                            .get(&key)
+                            .is_some_and(|existing| *existing != owner)
+                        {
+                            return Err(format!(
+                                "Component reference '{}' already exists",
+                                component.spice_ref
+                            ));
+                        }
+                        references.insert(key, owner);
                     }
                 }
                 for wire in &wires {
@@ -440,8 +491,12 @@ impl Workspace {
                         return Err(format!("Item {} already exists", wire.id));
                     }
                 }
-                sheet.components.extend(components);
-                sheet.wires.extend(wires);
+                let mut candidate = self.project.clone();
+                candidate.device_instances.extend(device_instances);
+                candidate.sheets[0].components.extend(components);
+                candidate.sheets[0].wires.extend(wires);
+                crate::device_instance::validate(&candidate)?;
+                self.project = candidate;
             }
             EditorCommand::AddWire { points } => {
                 validate_wire_points(&points)?;
@@ -795,14 +850,17 @@ mod tests {
                 variant_id: Some("industrial".into()),
                 unit_id: Some("core".into()),
                 position: Point { x: 200.0, y: 200.0 },
+                logical_instance_id: None,
             })
             .unwrap();
         assert_eq!(
             workspace.project.sheets[0].components[0].kind,
             ComponentKind::Device
         );
+        assert_eq!(workspace.project.device_instances.len(), 1);
         assert!(workspace.undo());
         assert!(workspace.project.sheets[0].components.is_empty());
+        assert!(workspace.project.device_instances.is_empty());
 
         let mut conflict = pack;
         conflict.pack.manifest.name.push_str(" changed");
@@ -911,6 +969,7 @@ mod tests {
                 id: Uuid::new_v4(),
                 points: vec![Point { x: 80., y: 120. }, Point { x: 20., y: 120. }],
             }],
+            device_instances: vec![],
         })
         .unwrap();
         assert_eq!(w.project.sheets[0].components[0].id, copied_id);

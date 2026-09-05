@@ -1,0 +1,101 @@
+import { describe, expect, it } from "vitest";
+import { createBlankSnapshot } from "@/blank";
+import { placeLocalDeviceUnit } from "@/device-unit-factory";
+import {
+  clipboardFromSelection,
+  instantiateClipboard,
+} from "@/selection-clipboard";
+import fixture from "../examples/devicepacks/test-mcu.devicepack.json";
+import type { DevicePack } from "@/types";
+
+describe("logical multi-unit devices", () => {
+  it("shares identity and reference across units", () => {
+    const project = createBlankSnapshot().project;
+    project.devicePacks.push({
+      sha256: "test-pack",
+      pack: fixture as unknown as DevicePack,
+    });
+    expect(
+      placeLocalDeviceUnit(project, {
+        action: "addDeviceComponent",
+        packSha256: "test-pack",
+        deviceId: "stmcu24",
+        variantId: "industrial",
+        unitId: "core",
+        logicalInstanceId: null,
+        position: { x: 0, y: 0 },
+      }),
+    ).toBe(true);
+    const logicalId = project.deviceInstances[0].id;
+    expect(
+      placeLocalDeviceUnit(project, {
+        action: "addDeviceComponent",
+        packSha256: "test-pack",
+        deviceId: "stmcu24",
+        variantId: "industrial",
+        unitId: "io",
+        logicalInstanceId: logicalId,
+        position: { x: 300, y: 0 },
+      }),
+    ).toBe(true);
+    expect(project.deviceInstances).toHaveLength(1);
+    expect(project.sheets[0].components.map((item) => item.spiceRef)).toEqual([
+      "U1",
+      "U1",
+    ]);
+    expect(
+      placeLocalDeviceUnit(project, {
+        action: "addDeviceComponent",
+        packSha256: "test-pack",
+        deviceId: "stmcu24",
+        variantId: "industrial",
+        unitId: "core",
+        logicalInstanceId: logicalId,
+        position: { x: 600, y: 0 },
+      }),
+    ).toBe(false);
+  });
+
+  it("clones one new logical instance when shared units are copied", () => {
+    const project = createBlankSnapshot().project;
+    project.devicePacks.push({
+      sha256: "test-pack",
+      pack: fixture as unknown as DevicePack,
+    });
+    placeLocalDeviceUnit(project, {
+      action: "addDeviceComponent",
+      packSha256: "test-pack",
+      deviceId: "stmcu24",
+      variantId: "industrial",
+      unitId: "core",
+      logicalInstanceId: null,
+      position: { x: 0, y: 0 },
+    });
+    const logicalId = project.deviceInstances[0].id;
+    placeLocalDeviceUnit(project, {
+      action: "addDeviceComponent",
+      packSha256: "test-pack",
+      deviceId: "stmcu24",
+      variantId: "industrial",
+      unitId: "io",
+      logicalInstanceId: logicalId,
+      position: { x: 300, y: 0 },
+    });
+    const selected = new Set(
+      project.sheets[0].components.map((component) => component.id),
+    );
+    const copied = clipboardFromSelection(project, selected);
+    const pasted = instantiateClipboard(copied, project.sheets[0], {
+      x: 20,
+      y: 20,
+    });
+    expect(pasted.deviceInstances).toHaveLength(1);
+    expect(new Set(pasted.components.map((item) => item.spiceRef))).toEqual(
+      new Set(["U2"]),
+    );
+    expect(
+      new Set(pasted.components.map((item) => item.device?.logicalInstanceId))
+        .size,
+    ).toBe(1);
+  });
+});

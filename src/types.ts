@@ -81,6 +81,7 @@ export type ComponentPlacement = {
     deviceId: string;
     variantId?: string | null;
     unitId?: string | null;
+    logicalInstanceId?: string | null;
   };
 };
 
@@ -90,12 +91,25 @@ export type DevicePackCapability = {
   available: boolean;
 };
 export type DeviceBinding = {
+  logicalInstanceId?: string | null;
   packSha256: string;
   packId: string;
   packVersion: string;
   deviceId: string;
   variantId?: string | null;
   symbolUnitId?: string | null;
+  capabilities: DevicePackCapability[];
+};
+export type DeviceInstance = {
+  id: string;
+  packSha256: string;
+  packId: string;
+  packVersion: string;
+  deviceId: string;
+  variantId?: string | null;
+  reference: string;
+  displayName: string;
+  model?: ModelBinding | null;
   capabilities: DevicePackCapability[];
 };
 export type DevicePackPin = {
@@ -242,6 +256,7 @@ export type Project = {
   simulationProfiles: SimulationProfile[];
   spiceLibraries: SpiceLibrary[];
   devicePacks: EmbeddedDevicePack[];
+  deviceInstances: DeviceInstance[];
   activeSimulationProfile: string | null;
   uiViewState: {
     activeSheetId: string;
@@ -305,6 +320,7 @@ export type EditorCommand =
       deviceId: string;
       variantId: string | null;
       unitId: string | null;
+      logicalInstanceId: string | null;
       position: Point;
     }
   | { action: "moveComponent"; id: string; position: Point }
@@ -329,7 +345,12 @@ export type EditorCommand =
       noConnect: boolean;
     }
   | { action: "deleteSelection"; componentIds: string[]; wireIds: string[] }
-  | { action: "insertSelection"; components: Component[]; wires: Wire[] }
+  | {
+      action: "insertSelection";
+      components: Component[];
+      wires: Wire[];
+      deviceInstances: DeviceInstance[];
+    }
   | { action: "addWire"; points: Point[] }
   | { action: "updateWire"; id: string; points: Point[] }
   | { action: "deleteWire"; id: string }

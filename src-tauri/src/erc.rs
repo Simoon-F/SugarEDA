@@ -264,10 +264,20 @@ pub fn check(project: &Project) -> ErcReport {
             }
         }
     }
-    for component in &components {
-        let mut pairs: BTreeMap<&str, Vec<_>> = BTreeMap::new();
-        for pin in &component.pins {
-            if let Some(pair) = pin.differential_pair_id.as_deref() {
+    let mut instance_pins: BTreeMap<Uuid, Vec<&PinRef<'_>>> = BTreeMap::new();
+    for pin in &pins {
+        let identity = pin
+            .component
+            .device
+            .as_ref()
+            .and_then(|binding| binding.logical_instance_id)
+            .unwrap_or(pin.component.id);
+        instance_pins.entry(identity).or_default().push(pin);
+    }
+    for instance in instance_pins.values() {
+        let mut pairs: BTreeMap<&str, Vec<&PinRef<'_>>> = BTreeMap::new();
+        for pin in instance {
+            if let Some(pair) = pin.pin.differential_pair_id.as_deref() {
                 pairs.entry(pair).or_default().push(pin);
             }
         }
@@ -275,23 +285,15 @@ pub fn check(project: &Project) -> ErcReport {
             if pair_pins.len() != 2 {
                 continue;
             }
-            let a = PinRef {
-                component,
-                pin: pair_pins[0],
-                point: absolute(component, pair_pins[0].offset),
-            };
-            let b = PinRef {
-                component,
-                pin: pair_pins[1],
-                point: absolute(component, pair_pins[1].offset),
-            };
-            let ac = connected(&mut uf, &a);
-            let bc = connected(&mut uf, &b);
+            let a = pair_pins[0];
+            let b = pair_pins[1];
+            let ac = connected(&mut uf, a);
+            let bc = connected(&mut uf, b);
             if ac != bc {
-                let missing = if ac { &b } else { &a };
+                let missing = if ac { b } else { a };
                 issues.push(issue(
                     "erc.differential_pair_incomplete",
-                    component.id,
+                    missing.component.id,
                     Some(missing.pin.id.clone()),
                     format!("差分对 {pair} 只连接了一端"),
                     format!("Differential pair {pair} has only one connected side"),

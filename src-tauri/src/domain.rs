@@ -3,7 +3,7 @@ use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
 use uuid::Uuid;
 
-pub const SCHEMA_VERSION: u32 = 3;
+pub const SCHEMA_VERSION: u32 = 4;
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(rename_all = "camelCase")]
@@ -17,6 +17,9 @@ pub struct Project {
     /// Validated, content-addressed device packs embedded in the project.
     #[serde(default)]
     pub device_packs: Vec<crate::device_pack::EmbeddedDevicePack>,
+    /// Logical parts shared by one or more independently placed symbol units.
+    #[serde(default)]
+    pub device_instances: Vec<DeviceInstance>,
     pub active_simulation_profile: Option<Uuid>,
     pub ui_view_state: UiViewState,
     pub created_at: DateTime<Utc>,
@@ -152,12 +155,33 @@ pub enum PinElectricalType {
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(rename_all = "camelCase")]
 pub struct DeviceBinding {
+    /// Stable identity shared by every symbol unit belonging to one physical part.
+    #[serde(default)]
+    pub logical_instance_id: Option<Uuid>,
     pub pack_sha256: String,
     pub pack_id: String,
     pub pack_version: String,
     pub device_id: String,
     pub variant_id: Option<String>,
     pub symbol_unit_id: Option<String>,
+    pub capabilities: Vec<crate::device_pack::DevicePackCapability>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct DeviceInstance {
+    pub id: Uuid,
+    pub pack_sha256: String,
+    pub pack_id: String,
+    pub pack_version: String,
+    pub device_id: String,
+    #[serde(default)]
+    pub variant_id: Option<String>,
+    pub reference: String,
+    pub display_name: String,
+    #[serde(default)]
+    pub model: Option<ModelBinding>,
+    #[serde(default)]
     pub capabilities: Vec<crate::device_pack::DevicePackCapability>,
 }
 
@@ -290,6 +314,7 @@ impl Project {
             }],
             spice_libraries: vec![],
             device_packs: vec![],
+            device_instances: vec![],
             active_simulation_profile: Some(profile_id),
             ui_view_state: UiViewState {
                 active_sheet_id: sheet_id,

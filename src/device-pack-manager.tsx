@@ -1,12 +1,13 @@
 import { useMemo, useState } from "react";
 import { Box, Check, Cpu, FileUp, Search, ShieldCheck, X } from "lucide-react";
-import type { ComponentPlacement, EmbeddedDevicePack } from "./types";
+import type { ComponentPlacement, Project } from "./types";
 import { useI18n } from "./i18n";
 import { deviceCapabilities } from "./device-pack";
+import { DeviceUnitActions } from "./device-unit-actions";
 
 type Props = {
   open: boolean;
-  packs: EmbeddedDevicePack[];
+  project: Project;
   onClose: () => void;
   onImport: () => void;
   onPlace: (placement: ComponentPlacement) => void;
@@ -14,11 +15,12 @@ type Props = {
 
 export function DevicePackManager({
   open,
-  packs,
+  project,
   onClose,
   onImport,
   onPlace,
 }: Props) {
+  const packs = project.devicePacks;
   const { language, t } = useI18n();
   const [query, setQuery] = useState("");
   const [vendor, setVendor] = useState("all");
@@ -219,32 +221,18 @@ export function DevicePackManager({
                       : "Validated and embedded in project"}
                   </div>
                 </div>
-                <div className="unit-actions">
-                  {units.map((unit) => (
-                    <button
-                      key={unit.id || "main"}
-                      onClick={() => {
-                        onPlace({
-                          kind: "device",
-                          device: {
-                            packSha256: pack.sha256,
-                            deviceId: device.id,
-                            variantId: device.variants[0]?.id ?? null,
-                            unitId: unit.id || null,
-                          },
-                        });
-                        onClose();
-                      }}
-                    >
-                      <span>
-                        {units.length > 1 ? unit.name : t("Place device")}
-                      </span>
-                      {unit.groups.length > 0 && (
-                        <small>{unit.groups.join(" · ")}</small>
-                      )}
-                    </button>
-                  ))}
-                </div>
+                <DeviceUnitActions
+                  project={project}
+                  packSha256={pack.sha256}
+                  deviceId={device.id}
+                  variantId={device.variants[0]?.id ?? null}
+                  units={units}
+                  language={language}
+                  onPlace={(placement) => {
+                    onPlace(placement);
+                    onClose();
+                  }}
+                />
               </article>
             );
           })}

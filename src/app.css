@@ -350,6 +350,26 @@ body.component-dragging {
   max-height: 100px;
   overflow: auto;
 }
+.unit-target {
+  display: grid;
+  gap: 3px;
+  padding-bottom: 3px;
+}
+.unit-target > span {
+  color: var(--text-muted);
+  font-size: 9px;
+  font-weight: 600;
+}
+.unit-target select {
+  width: 100%;
+  height: 28px;
+  padding: 0 6px;
+  color: var(--ink);
+  background: #fff;
+  border: 1px solid var(--line-dark);
+  border-radius: 6px;
+  font-size: 10px;
+}
 .unit-actions button {
   min-height: 34px;
   display: grid;
@@ -364,6 +384,10 @@ body.component-dragging {
 .unit-actions button:hover {
   background: var(--orange-soft);
   border-color: #adc7ef;
+}
+.unit-actions button:disabled {
+  cursor: not-allowed;
+  opacity: 0.48;
 }
 .unit-actions span {
   font-size: 11px;

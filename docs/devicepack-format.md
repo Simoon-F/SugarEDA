@@ -56,6 +56,10 @@ DevicePack 是 SugarEDA 的厂商无关、纯数据器件包。文件名使用 `
 
 符号包含一个或多个 unit，每个 unit 选择若干引脚 `groups`。BGA 可拆为 POWER、GPIO、DDR、USB 等可独立放置的单元，避免一个不可读的大矩形。模型端口顺序仍按包内引脚顺序保持稳定，画布布局由方向和分组动态生成。
 
+从工程 schema v4 开始，多 unit 符号通过独立的 `deviceInstances[]` 共享同一个物理器件身份、位号、变体和模型绑定；画布上的每个 `Component.device.logicalInstanceId` 指回该身份。同一个 unit 不能在同一逻辑实例中重复放置。删除最后一个 unit 会同步清理逻辑实例，复制多个 unit 只克隆一个新逻辑实例，保证撤销、重做和保存重开后关系不漂移。
+
+应用只写入当前 schema v4，不保留并行 schema 或功能分支。schema v1～v3 仅作为读取兼容入口，打开后直接转换为 v4；v3 的每个旧动态元件会迁移为独立实例，因此不会意外合并原有元件。
+
 ### `packages[]`
 
 封装包含 `id`、`name`、`kind` 和完整 `pads`。每个器件引脚编号必须匹配一个 pad。格式同时支持两引脚器件和数千焊球 BGA；当前上限为每器件 4,096 引脚。

@@ -11,6 +11,14 @@ import { SimulationCheckPanel } from "./simulation-check-panel";
 import { RecoveryDialog, UnsavedChangesDialog } from "./reliability-dialogs";
 import { DevicePackManager } from "./device-pack-manager";
 import { ErcPanel } from "./erc-panel";
+import { placeLocalDeviceUnit } from "./device-unit-factory";
+import { removeOrphanDeviceInstances } from "./device-instance";
+import { buildVisibleLibrary, type LibraryGroup } from "./component-library";
+import {
+  clipboardFromSelection,
+  instantiateClipboard,
+  type ClipboardPayload,
+} from "./selection-clipboard";
 import {
   availableProbeOptions,
   localSimulationCheck,
@@ -57,7 +65,6 @@ import type {
   ComponentPlacement,
   EditorCommand,
   Point,
-  Project,
   RecentProject,
   RecoveryInfo,
   SimulationProfile,
@@ -68,7 +75,6 @@ import type {
   ErcReport,
 } from "./types";
 
-type ClipboardPayload = { components: Component[]; wires: Wire[] };
 type PendingTransition = {
   destination: string;
   action: () => Promise<void>;
@@ -128,63 +134,7 @@ function moveLocalSelection(
   }
 }
 
-const nextReference = (reference: string, used: Set<string>) => {
-  if (!reference) return "";
-  const prefix = reference.match(/^[A-Za-z]+/)?.[0] ?? reference;
-  let number = 1;
-  while (used.has(`${prefix}${number}`.toLowerCase())) number += 1;
-  const next = `${prefix}${number}`;
-  used.add(next.toLowerCase());
-  return next;
-};
-
-function instantiateClipboard(
-  clipboard: ClipboardPayload,
-  sheet: Project["sheets"][number],
-  offset: Point,
-  reservedReferences?: Set<string>,
-): ClipboardPayload {
-  const usedReferences = new Set(
-    [
-      ...sheet.components.map((component) => component.spiceRef.toLowerCase()),
-      ...(reservedReferences ?? []),
-    ].filter(Boolean),
-  );
-  const result = {
-    components: clipboard.components.map((source) => {
-      const component = structuredClone(source);
-      component.id = crypto.randomUUID();
-      component.position = {
-        x: source.position.x + offset.x,
-        y: source.position.y + offset.y,
-      };
-      const reference = nextReference(source.spiceRef, usedReferences);
-      if (component.displayName === component.spiceRef)
-        component.displayName = reference;
-      component.spiceRef = reference;
-      return component;
-    }),
-    wires: clipboard.wires.map((source) => ({
-      id: crypto.randomUUID(),
-      points: translatedPoints(source.points, offset),
-    })),
-  };
-  if (reservedReferences)
-    for (const reference of usedReferences) reservedReferences.add(reference);
-  return result;
-}
-
-const library: {
-  group: string;
-  items: {
-    kind: ComponentKind;
-    name: string;
-    shortcut: string;
-    glyph: string;
-    model?: { libraryId: string; modelName: string };
-    device?: ComponentPlacement["device"];
-  }[];
-}[] = [
+const library: LibraryGroup[] = [
   {
     group: "PASSIVES",
     items: [
@@ -489,8 +439,26 @@ function App() {
           (c) => c.id === command.id,
         );
         if (c) {
-          c.displayName = command.displayName;
-          c.spiceRef = command.spiceRef;
+          const logicalId = c.device?.logicalInstanceId;
+          if (logicalId) {
+            const instance = next.project.deviceInstances.find(
+              (item) => item.id === logicalId,
+            );
+            if (instance) {
+              instance.displayName = command.displayName;
+              instance.reference = command.spiceRef;
+            }
+            for (const unit of next.project.sheets.flatMap(
+              (sheet) => sheet.components,
+            ))
+              if (unit.device?.logicalInstanceId === logicalId) {
+                unit.displayName = command.displayName;
+                unit.spiceRef = command.spiceRef;
+              }
+          } else {
+            c.displayName = command.displayName;
+            c.spiceRef = command.spiceRef;
+          }
           c.parameters.value = command.value;
         }
       } else if (command.action === "rotateComponent") {
@@ -506,7 +474,9 @@ function App() {
         next.project.sheets[0].wires = next.project.sheets[0].wires.filter(
           (w) => !command.wireIds.includes(w.id),
         );
+        removeOrphanDeviceInstances(next.project);
       } else if (command.action === "insertSelection") {
+        next.project.deviceInstances.push(...command.deviceInstances);
         next.project.sheets[0].components.push(...command.components);
         next.project.sheets[0].wires.push(...command.wires);
       } else if (command.action === "addWire")
@@ -600,121 +570,7 @@ function App() {
           },
         });
       } else if (command.action === "addDeviceComponent") {
-        const embedded = next.project.devicePacks.find(
-          (pack) => pack.sha256 === command.packSha256,
-        );
-        const device = embedded?.pack.devices.find(
-          (item) => item.id === command.deviceId,
-        );
-        const symbol = embedded?.pack.symbols.find(
-          (item) => item.id === device?.symbolId,
-        );
-        const unit =
-          symbol?.units.find((item) => item.id === command.unitId) ??
-          symbol?.units[0];
-        if (!embedded || !device) return current;
-        const sources = device.pins.filter(
-          (pin) =>
-            !unit || !unit.groups.length || unit.groups.includes(pin.group),
-        );
-        const left = sources.filter(
-          (pin, index) =>
-            ["input", "power"].includes(pin.direction) ||
-            (index % 2 === 0 &&
-              ["passive", "bidirectional"].includes(pin.direction)),
-        );
-        const leftIds = new Set(left.map((pin) => pin.id));
-        const right = sources.filter((pin) => !leftIds.has(pin.id));
-        const domainById = new Map(
-          device.voltageDomains.map((domain) => [domain.id, domain]),
-        );
-        const offset = (pin: (typeof sources)[number]) => {
-          const side = leftIds.has(pin.id) ? left : right;
-          const index = side.findIndex((item) => item.id === pin.id);
-          return {
-            x: leftIds.has(pin.id) ? -110 : 110,
-            y: (index - (side.length - 1) / 2) * 20,
-          };
-        };
-        const model = embedded.pack.models.find(
-          (item) => item.kind === "spice" && device.modelIds.includes(item.id),
-        );
-        const library = model
-          ? next.project.spiceLibraries.find(
-              (item) =>
-                item.sourceName === `devicepack:${embedded.sha256}:${model.id}`,
-            )
-          : undefined;
-        const definition = library?.models.find(
-          (item) => item.name === model?.modelName,
-        );
-        const prefix = definition ? "X" : "U";
-        const sequence =
-          next.project.sheets[0].components.filter((item) =>
-            item.spiceRef.startsWith(prefix),
-          ).length + 1;
-        next.project.sheets[0].components.push({
-          id: crypto.randomUUID(),
-          kind: "device",
-          position: command.position,
-          rotation: 0,
-          parameters: {},
-          pins: sources.map((pin) => {
-            const domain = pin.voltageDomainId
-              ? domainById.get(pin.voltageDomainId)
-              : undefined;
-            const pair = device.differentialPairs.find(
-              (item) =>
-                item.positivePinId === pin.id || item.negativePinId === pin.id,
-            );
-            const rules = device.rules.filter((item) =>
-              item.pinIds.includes(pin.id),
-            );
-            return {
-              ...pin,
-              offset: offset(pin),
-              voltageMin: domain?.minVoltage,
-              voltageMax: domain?.maxVoltage,
-              alternateFunctions:
-                device.alternateFunctions.find((item) => item.pinId === pin.id)
-                  ?.functions ?? [],
-              differentialPairId: pair?.id,
-              differentialPolarity: pair
-                ? pair.positivePinId === pin.id
-                  ? "positive"
-                  : "negative"
-                : null,
-              required: rules.some(
-                (item) =>
-                  item.kind === "required" || item.kind === "powerInput",
-              ),
-              allowFloating:
-                rules.some((item) => item.kind === "allowFloating") ||
-                pin.direction === "notConnected",
-              noConnect: false,
-            };
-          }),
-          displayName: device.name,
-          spiceRef: `${prefix}${sequence}`,
-          model: definition
-            ? {
-                libraryId: library!.id,
-                modelName: definition.name,
-                kind: definition.kind,
-              }
-            : null,
-          device: {
-            packSha256: embedded.sha256,
-            packId: embedded.pack.manifest.id,
-            packVersion: embedded.pack.manifest.version,
-            deviceId: device.id,
-            variantId: command.variantId,
-            symbolUnitId: unit?.id ?? null,
-            capabilities: [],
-          },
-          symbolWidth: 220,
-          symbolHeight: Math.max(left.length, right.length, 2) * 20 + 36,
-        });
+        if (!placeLocalDeviceUnit(next.project, command)) return current;
       } else if (command.action === "setPinNoConnect") {
         const component = next.project.sheets[0].components.find(
           (item) => item.id === command.componentId,
@@ -824,19 +680,12 @@ function App() {
   }, [selected, command, sheet.components, sheet.wires]);
   const copySelection = useCallback(() => {
     const ids = new Set(selected);
-    const payload = {
-      components: sheet.components
-        .filter((component) => ids.has(component.id))
-        .map((component) => structuredClone(component)),
-      wires: sheet.wires
-        .filter((wire) => ids.has(wire.id))
-        .map((wire) => structuredClone(wire)),
-    };
+    const payload = clipboardFromSelection(snapshot.project, ids);
     if (!payload.components.length && !payload.wires.length) return false;
     clipboard.current = payload;
     pasteSequence.current = 0;
     return true;
-  }, [selected, sheet.components, sheet.wires]);
+  }, [selected, snapshot.project]);
   const pasteSelection = useCallback(
     async (source = clipboard.current, steps?: number) => {
       if (!source) return;
@@ -855,6 +704,7 @@ function App() {
         action: "insertSelection",
         components: inserted.components,
         wires: inserted.wires,
+        deviceInstances: inserted.deviceInstances,
       });
       setSelected([
         ...inserted.components.map((component) => component.id),
@@ -1329,73 +1179,10 @@ function App() {
     window.addEventListener("keydown", key);
     return () => window.removeEventListener("keydown", key);
   });
-  const visibleLibrary = useMemo(() => {
-    const imported = snapshot.project.spiceLibraries.flatMap((source) =>
-      source.models.map((model) => ({
-        kind: (model.kind === "bipolar"
-          ? "bipolarTransistor"
-          : model.kind) as ComponentKind,
-        name: model.name,
-        shortcut:
-          model.kind === "diode"
-            ? "D"
-            : model.kind === "bipolar"
-              ? "Q"
-              : model.kind === "mosfet"
-                ? "M"
-                : "X",
-        glyph:
-          model.kind === "diode"
-            ? "—▷|—"
-            : model.kind === "bipolar"
-              ? "BJT"
-              : model.kind === "mosfet"
-                ? "MOS"
-                : "▣",
-        model: { libraryId: source.id, modelName: model.name },
-      })),
-    );
-    const packed = snapshot.project.devicePacks.flatMap((embedded) =>
-      embedded.pack.devices.flatMap((device) => {
-        const symbol = embedded.pack.symbols.find(
-          (item) => item.id === device.symbolId,
-        );
-        const units = symbol?.units.length
-          ? symbol.units
-          : [{ id: "", name: device.name, groups: [] }];
-        return units.map((unit) => ({
-          kind: "device" as ComponentKind,
-          name:
-            units.length > 1 ? `${device.name} · ${unit.name}` : device.name,
-          shortcut: "U",
-          glyph:
-            device.deviceType === "soc"
-              ? "SOC"
-              : device.deviceType === "microcontroller"
-                ? "MCU"
-                : "IC",
-          device: {
-            packSha256: embedded.sha256,
-            deviceId: device.id,
-            variantId: device.variants[0]?.id ?? null,
-            unitId: unit.id || null,
-          },
-        }));
-      }),
-    );
-    const groups = imported.length
-      ? [...library, { group: "IMPORTED MODELS", items: imported }]
-      : library;
-    if (packed.length) groups.push({ group: "DEVICE PACKS", items: packed });
-    return groups
-      .map((g) => ({
-        ...g,
-        items: g.items.filter((i) =>
-          i.name.toLowerCase().includes(query.toLowerCase()),
-        ),
-      }))
-      .filter((g) => g.items.length);
-  }, [query, snapshot.project.spiceLibraries, snapshot.project.devicePacks]);
+  const visibleLibrary = useMemo(
+    () => buildVisibleLibrary(library, snapshot.project, query),
+    [query, snapshot.project],
+  );
   const probeOptions = useMemo(
     () => availableProbeOptions(snapshot.project),
     [snapshot.project],
@@ -2110,7 +1897,7 @@ function App() {
       />
       <DevicePackManager
         open={packManagerOpen}
-        packs={snapshot.project.devicePacks}
+        project={snapshot.project}
         onClose={() => setPackManagerOpen(false)}
         onImport={() => void importDevicePack()}
         onPlace={(next) => {

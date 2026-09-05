@@ -611,7 +611,7 @@ fn analysis_line(analysis: &Analysis) -> String {
 
 fn validate_components(project: &Project, sheet: &SchematicSheet) -> Vec<NetlistError> {
     let mut errors = vec![];
-    let mut refs = BTreeSet::new();
+    let mut refs = BTreeMap::new();
     let mut exported = BTreeSet::new();
     let used_library_ids: BTreeSet<_> = sheet
         .components
@@ -666,12 +666,20 @@ fn validate_components(project: &Project, sheet: &SchematicSheet) -> Vec<Netlist
                 message: format!("Invalid reference '{}'", component.spice_ref),
                 component_id: Some(component.id),
             });
-        } else if !refs.insert(component.spice_ref.to_ascii_uppercase()) {
-            errors.push(NetlistError {
-                code: "duplicate_reference",
-                message: format!("Duplicate reference '{}'", component.spice_ref),
-                component_id: Some(component.id),
-            });
+        } else {
+            let key = component.spice_ref.to_ascii_uppercase();
+            let owner = component
+                .device
+                .as_ref()
+                .and_then(|binding| binding.logical_instance_id);
+            if refs.get(&key).is_some_and(|existing| *existing != owner) {
+                errors.push(NetlistError {
+                    code: "duplicate_reference",
+                    message: format!("Duplicate reference '{}'", component.spice_ref),
+                    component_id: Some(component.id),
+                });
+            }
+            refs.insert(key, owner);
         }
         if let Some(model) = &component.model {
             let definition = project
@@ -809,6 +817,43 @@ mod tests {
     }
 
     #[test]
+    fn shared_symbol_units_do_not_report_duplicate_reference() {
+        let pack = crate::device_pack::import_bytes(include_bytes!(
+            "../../examples/devicepacks/test-mcu.devicepack.json"
+        ))
+        .unwrap();
+        let mut project = Project::blank("multi-unit refs");
+        project.device_packs.push(pack.clone());
+        let core = crate::device_instance::place_unit(
+            &mut project,
+            &pack.sha256,
+            "stmcu24",
+            Some("industrial"),
+            Some("core"),
+            None,
+            Point { x: 0.0, y: 0.0 },
+        )
+        .unwrap();
+        let logical_id = core.device.as_ref().unwrap().logical_instance_id;
+        project.sheets[0].components.push(core);
+        let io = crate::device_instance::place_unit(
+            &mut project,
+            &pack.sha256,
+            "stmcu24",
+            Some("industrial"),
+            Some("io"),
+            logical_id,
+            Point { x: 300.0, y: 0.0 },
+        )
+        .unwrap();
+        project.sheets[0].components.push(io);
+        let errors = validate_components(&project, &project.sheets[0]);
+        assert!(!errors
+            .iter()
+            .any(|error| error.code == "duplicate_reference"));
+    }
+
+    #[test]
     fn device_pack_spice_subcircuit_is_emitted_with_embedded_model() {
         let embedded = crate::device_pack::import_bytes(include_bytes!(
             "../../examples/devicepacks/test-analog.devicepack.json"
@@ -819,12 +864,13 @@ mod tests {
         project.simulation_profiles[0].signals.clear();
         project.device_packs.push(embedded.clone());
         project.spice_libraries = libraries;
-        let component = crate::device_pack::instantiate(
-            &project,
+        let component = crate::device_instance::place_unit(
+            &mut project,
             &embedded.sha256,
             "sta100",
             None,
             Some("a"),
+            None,
             Point { x: 300.0, y: 300.0 },
         )
         .unwrap();

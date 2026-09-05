@@ -5,7 +5,7 @@ export function createBlankSnapshot(name = "Untitled circuit"): Snapshot {
   const profileId = crypto.randomUUID();
   const now = new Date().toISOString();
   const project: Project = {
-    schemaVersion: 3,
+    schemaVersion: 4,
     metadata: {
       id: crypto.randomUUID(),
       name,
@@ -31,6 +31,7 @@ export function createBlankSnapshot(name = "Untitled circuit"): Snapshot {
     ],
     spiceLibraries: [],
     devicePacks: [],
+    deviceInstances: [],
     activeSimulationProfile: profileId,
     uiViewState: {
       activeSheetId: sheetId,

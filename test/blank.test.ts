@@ -8,5 +8,7 @@ describe("blank workspace", () => {
     expect(snapshot.project.sheets[0].components).toEqual([]);
     expect(snapshot.project.sheets[0].wires).toEqual([]);
     expect(snapshot.project.simulationProfiles).toHaveLength(1);
+    expect(snapshot.project.schemaVersion).toBe(4);
+    expect(snapshot.project.deviceInstances).toEqual([]);
   });
 });

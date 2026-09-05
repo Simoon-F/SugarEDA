@@ -196,6 +196,7 @@ export const SchematicCanvas = memo(function SchematicCanvas({
               deviceId: selection.device.deviceId,
               variantId: selection.device.variantId ?? null,
               unitId: selection.device.unitId ?? null,
+              logicalInstanceId: selection.device.logicalInstanceId ?? null,
               position,
             }
           : selection.model

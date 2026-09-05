@@ -1,4 +1,5 @@
 mod application;
+mod device_instance;
 mod device_pack;
 mod domain;
 mod erc;
