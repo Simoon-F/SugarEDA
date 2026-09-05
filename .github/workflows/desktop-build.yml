@@ -2,6 +2,11 @@ name: Build SugarEDA Desktop
 
 on:
   workflow_dispatch:
+    inputs:
+      version:
+        description: Release version without a leading v, for example 1.2.3
+        required: true
+        type: string
 
 permissions:
   contents: read
@@ -11,8 +16,85 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
+  prepare:
+    name: Prepare release version
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    outputs:
+      commit_sha: ${{ steps.revision.outputs.commit_sha }}
+    steps:
+      - name: Require the master branch
+        if: github.ref != 'refs/heads/master'
+        run: |
+          echo "Desktop releases must be dispatched from the master branch."
+          exit 1
+
+      - name: Check out master
+        uses: actions/checkout@v7
+        with:
+          ref: master
+          fetch-depth: 0
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          package-manager-cache: false
+
+      - name: Validate release version
+        env:
+          RELEASE_VERSION: ${{ inputs.version }}
+        run: node scripts/set-build-version.mjs --validate-only
+
+      - name: Synchronize release version
+        env:
+          RELEASE_VERSION: ${{ inputs.version }}
+        run: |
+          tag="v${RELEASE_VERSION}"
+          if git rev-parse "refs/tags/${tag}" >/dev/null 2>&1; then
+            tagged_version="$(git show "${tag}:package.json" | node -e "let input = ''; process.stdin.on('data', chunk => input += chunk); process.stdin.on('end', () => process.stdout.write(JSON.parse(input).version));")"
+            test "$tagged_version" = "$RELEASE_VERSION" || {
+              echo "Tag ${tag} contains package version ${tagged_version}, expected ${RELEASE_VERSION}."
+              exit 1
+            }
+            echo "Reusing existing source tag ${tag}."
+          else
+            node scripts/set-build-version.mjs
+          fi
+
+      - name: Commit release version and create source tag
+        env:
+          RELEASE_VERSION: ${{ inputs.version }}
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          tag="v${RELEASE_VERSION}"
+          if git rev-parse "refs/tags/${tag}" >/dev/null 2>&1; then
+            echo "Source tag ${tag} already exists; leaving it unchanged."
+            exit 0
+          fi
+
+          if ! git diff --quiet -- package.json package-lock.json src-tauri/Cargo.toml src-tauri/Cargo.lock src-tauri/tauri.conf.json; then
+            git add package.json package-lock.json src-tauri/Cargo.toml src-tauri/Cargo.lock src-tauri/tauri.conf.json
+            git commit -m "chore(release): v${RELEASE_VERSION}"
+            git push origin HEAD:master
+          fi
+
+          git tag -a "$tag" -m "SugarEDA ${tag}"
+          git push origin "$tag"
+
+      - name: Record release revision
+        id: revision
+        env:
+          RELEASE_VERSION: ${{ inputs.version }}
+        run: |
+          tag="v${RELEASE_VERSION}"
+          echo "commit_sha=$(git rev-list -n 1 "$tag")" >> "$GITHUB_OUTPUT"
+
   build:
     name: ${{ matrix.name }}
+    needs: prepare
     runs-on: ${{ matrix.os }}
     timeout-minutes: 60
     strategy:
@@ -39,6 +121,8 @@ jobs:
     steps:
       - name: Check out repository
         uses: actions/checkout@v7
+        with:
+          ref: ${{ needs.prepare.outputs.commit_sha }}
 
       - name: Set up Node.js
         uses: actions/setup-node@v7
@@ -173,4 +257,72 @@ jobs:
           name: sugareda-${{ matrix.asset_name }}
           path: release-assets/*
           if-no-files-found: error
-          retention-days: 14
+          retention-days: 1
+
+  publish:
+    name: Publish GitHub Release
+    needs: [prepare, build]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Check out release revision
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ needs.prepare.outputs.commit_sha }}
+          fetch-depth: 0
+
+      - name: Download desktop artifacts
+        uses: actions/download-artifact@v8
+        with:
+          pattern: sugareda-*
+          path: release-assets
+          merge-multiple: true
+
+      - name: Verify release assets
+        env:
+          RELEASE_VERSION: ${{ inputs.version }}
+        run: |
+          expected_assets=(
+            "SugarEDA-${RELEASE_VERSION}-macos-arm64.dmg"
+            "SugarEDA-${RELEASE_VERSION}-macos-x64.dmg"
+            "SugarEDA-${RELEASE_VERSION}-windows-x64.msi"
+            "SugarEDA-${RELEASE_VERSION}-windows-x64-Setup.exe"
+          )
+          for asset in "${expected_assets[@]}"; do
+            test -s "release-assets/${asset}" || {
+              echo "Release asset is missing or empty: ${asset}"
+              exit 1
+            }
+          done
+
+          cd release-assets
+          sha256sum "${expected_assets[@]}" > SHA256SUMS.txt
+
+      - name: Create or update GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_COMMIT_SHA: ${{ needs.prepare.outputs.commit_sha }}
+          RELEASE_VERSION: ${{ inputs.version }}
+        run: |
+          tag="v${RELEASE_VERSION}"
+          test "$(git rev-list -n 1 "$tag")" = "$RELEASE_COMMIT_SHA" || {
+            echo "Tag ${tag} does not point to the prepared release commit."
+            exit 1
+          }
+
+          if gh release view "$tag" >/dev/null 2>&1; then
+            gh release upload "$tag" release-assets/* --clobber
+          elif [[ "$RELEASE_VERSION" == *-* ]]; then
+            gh release create "$tag" release-assets/* \
+              --verify-tag \
+              --title "SugarEDA ${tag}" \
+              --generate-notes \
+              --prerelease
+          else
+            gh release create "$tag" release-assets/* \
+              --verify-tag \
+              --title "SugarEDA ${tag}" \
+              --generate-notes \
+              --latest
+          fi
