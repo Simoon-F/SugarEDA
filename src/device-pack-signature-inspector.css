@@ -191,6 +191,25 @@
 .trusted-key-list-title > span {
   gap: 6px;
 }
+.trusted-key-list-actions,
+.trusted-key-row-actions {
+  display: flex !important;
+  align-items: center;
+  gap: 5px !important;
+}
+.trusted-key-list-actions button {
+  height: 25px;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 0 7px;
+  color: #174f75;
+  background: #fff;
+  border: 1px solid #b9ceda;
+  border-radius: 5px;
+  font-size: 7px;
+  font-weight: 750;
+}
 
 .trusted-key-list > p {
   padding: 10px;
@@ -222,7 +241,7 @@
   color: var(--text-muted);
 }
 
-.trusted-key-list > div > button {
+.trusted-key-row-actions > button {
   width: 28px;
   height: 28px;
   display: grid;
@@ -232,6 +251,11 @@
   background: #fff4f5;
   border: 1px solid #f1c8cc;
   border-radius: 6px;
+}
+.trusted-key-row-actions > button:first-child {
+  color: #315f7a;
+  background: #f2f8fb;
+  border-color: #bdd9e8;
 }
 
 .pack-signature-dialog footer {

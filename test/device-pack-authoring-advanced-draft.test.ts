@@ -4,6 +4,7 @@ import {
   addDifferentialPair,
   addDocument,
   addSymbolUnit,
+  importDevicePackSpiceModel,
   removeDeviceModel,
   updateSpicePort,
   updateSymbolUnit,
@@ -81,5 +82,28 @@ describe("advanced DevicePack authoring draft", () => {
     expect(result.devices[0].modelIds).toEqual([withModels.models[1].id]);
     expect(result.devices[0].spiceBindings).toEqual([]);
     expect(result.documents[0].license).toBe("LicenseRef-Author-Defined");
+  });
+
+  it("embeds a restricted inspected SPICE definition with an explicit port map", () => {
+    const pack = addDevicePackPin(createDevicePackDraft());
+    const imported = importDevicePackSpiceModel(
+      pack,
+      "device",
+      {
+        sourceFileName: "authorized.lib",
+        bytes: 48,
+        sha256: "a".repeat(64),
+        definitions: [{ name: "AMP", kind: "subcircuit", pins: ["IN", "OUT"] }],
+        embeddedContent: ".subckt AMP IN OUT\nR1 IN OUT 1k\n.ends AMP\n",
+      },
+      "AMP",
+      [
+        { modelPort: "IN", pinId: "pin1" },
+        { modelPort: "OUT", pinId: "pin2" },
+      ],
+    );
+    expect(imported.models[0].modelName).toBe("AMP");
+    expect(imported.models[0].metadata.sourceFileName).toBe("authorized.lib");
+    expect(imported.devices[0].spiceBindings?.[0].ports[1].pinId).toBe("pin2");
   });
 });

@@ -6,9 +6,11 @@ import {
   updateSpicePort,
 } from "./device-pack-authoring-advanced-draft";
 import type { DevicePack } from "./types";
+import { authoredDevice } from "./device-pack-authoring-scope";
 
 type Props = {
   pack: DevicePack;
+  deviceId: string;
   model: DevicePack["models"][number];
   language: "zh-CN" | "en";
   onChange: (pack: DevicePack) => void;
@@ -16,12 +18,13 @@ type Props = {
 
 export function DevicePackAuthoringModelCard({
   pack,
+  deviceId,
   model,
   language,
   onChange,
 }: Props) {
   const zh = language === "zh-CN";
-  const device = pack.devices[0];
+  const device = authoredDevice(pack, deviceId);
   const binding = (device.spiceBindings ?? []).find(
     (item) => item.modelId === model.id,
   );
@@ -143,6 +146,7 @@ export function DevicePackAuthoringModelCard({
                           model.id,
                           port.pinId,
                           event.target.value,
+                          deviceId,
                         ),
                       )
                     }

@@ -1,4 +1,9 @@
-import type { DevicePack } from "./types";
+import type { DevicePack, DevicePackSpiceModelFileReport } from "./types";
+import {
+  authoredDevice,
+  authoredSymbol,
+  replaceAuthoredDeviceById,
+} from "./device-pack-authoring-scope";
 
 type SymbolUnit = DevicePack["symbols"][number]["units"][number];
 type DifferentialPair =
@@ -6,12 +11,14 @@ type DifferentialPair =
 type DeviceModel = DevicePack["models"][number];
 type DocumentMetadata = DevicePack["documents"][number];
 
-export function addSymbolUnit(pack: DevicePack): DevicePack {
-  const symbol = primarySymbol(pack);
+export function addSymbolUnit(pack: DevicePack, deviceId?: string): DevicePack {
+  const symbol = authoredSymbol(pack, deviceId);
   let suffix = symbol.units.length + 1;
   while (symbol.units.some((unit) => unit.id === `unit${suffix}`)) suffix += 1;
   const assigned = new Set(symbol.units.flatMap((unit) => unit.groups));
-  const groups = unique(pack.devices[0].pins.map((pin) => pin.group));
+  const groups = unique(
+    authoredDevice(pack, deviceId).pins.map((pin) => pin.group),
+  );
   const firstUnassigned = groups.find((group) => !assigned.has(group));
   const splitGroup =
     firstUnassigned ??
@@ -42,8 +49,9 @@ export function updateSymbolUnit(
   pack: DevicePack,
   unitId: string,
   patch: Partial<SymbolUnit>,
+  deviceId?: string,
 ): DevicePack {
-  const symbol = primarySymbol(pack);
+  const symbol = authoredSymbol(pack, deviceId);
   return replacePrimarySymbol(pack, {
     ...symbol,
     units: symbol.units.map((unit) =>
@@ -52,8 +60,12 @@ export function updateSymbolUnit(
   });
 }
 
-export function removeSymbolUnit(pack: DevicePack, unitId: string): DevicePack {
-  const symbol = primarySymbol(pack);
+export function removeSymbolUnit(
+  pack: DevicePack,
+  unitId: string,
+  deviceId?: string,
+): DevicePack {
+  const symbol = authoredSymbol(pack, deviceId);
   if (symbol.units.length <= 1) return pack;
   return replacePrimarySymbol(pack, {
     ...symbol,
@@ -61,13 +73,16 @@ export function removeSymbolUnit(pack: DevicePack, unitId: string): DevicePack {
   });
 }
 
-export function addDifferentialPair(pack: DevicePack): DevicePack {
-  const device = pack.devices[0];
+export function addDifferentialPair(
+  pack: DevicePack,
+  deviceId?: string,
+): DevicePack {
+  const device = authoredDevice(pack, deviceId);
   if (device.pins.length < 2) return pack;
   let suffix = device.differentialPairs.length + 1;
   while (device.differentialPairs.some((pair) => pair.id === `diff${suffix}`))
     suffix += 1;
-  return replacePrimaryDevice(pack, {
+  return replaceAuthoredDeviceById(pack, device.id, {
     ...device,
     differentialPairs: [
       ...device.differentialPairs,
@@ -84,9 +99,10 @@ export function updateDifferentialPair(
   pack: DevicePack,
   pairId: string,
   patch: Partial<DifferentialPair>,
+  deviceId?: string,
 ): DevicePack {
-  const device = pack.devices[0];
-  return replacePrimaryDevice(pack, {
+  const device = authoredDevice(pack, deviceId);
+  return replaceAuthoredDeviceById(pack, device.id, {
     ...device,
     differentialPairs: device.differentialPairs.map((pair) =>
       pair.id === pairId ? { ...pair, ...patch } : pair,
@@ -97,9 +113,10 @@ export function updateDifferentialPair(
 export function removeDifferentialPair(
   pack: DevicePack,
   pairId: string,
+  deviceId?: string,
 ): DevicePack {
-  const device = pack.devices[0];
-  return replacePrimaryDevice(pack, {
+  const device = authoredDevice(pack, deviceId);
+  return replaceAuthoredDeviceById(pack, device.id, {
     ...device,
     differentialPairs: device.differentialPairs.filter(
       (pair) => pair.id !== pairId,
@@ -110,12 +127,13 @@ export function removeDifferentialPair(
 export function addDeviceModel(
   pack: DevicePack,
   kind: DeviceModel["kind"],
+  deviceId?: string,
 ): DevicePack {
   let suffix = pack.models.length + 1;
   while (pack.models.some((model) => model.id === `${kind}-model-${suffix}`))
     suffix += 1;
   const id = `${kind}-model-${suffix}`;
-  const device = pack.devices[0];
+  const device = authoredDevice(pack, deviceId);
   const model: DeviceModel = {
     id,
     kind,
@@ -154,8 +172,51 @@ export function addDeviceModel(
         : device.spiceBindings,
   };
   return {
-    ...replacePrimaryDevice(pack, nextDevice),
+    ...replaceAuthoredDeviceById(pack, device.id, nextDevice),
     models: [...pack.models, model],
+  };
+}
+
+export function importDevicePackSpiceModel(
+  pack: DevicePack,
+  deviceId: string,
+  report: DevicePackSpiceModelFileReport,
+  definitionName: string,
+  ports: { modelPort: string; pinId: string }[],
+): DevicePack {
+  const definition = report.definitions.find(
+    (candidate) => candidate.name === definitionName,
+  );
+  if (!definition) return pack;
+  let suffix = pack.models.length + 1;
+  while (pack.models.some((model) => model.id === `spice-import-${suffix}`))
+    suffix += 1;
+  const modelId = `spice-import-${suffix}`;
+  const device = authoredDevice(pack, deviceId);
+  return {
+    ...replaceAuthoredDeviceById(pack, device.id, {
+      ...device,
+      modelIds: [...device.modelIds, modelId],
+      spiceBindings: [...(device.spiceBindings ?? []), { modelId, ports }],
+    }),
+    models: [
+      ...pack.models,
+      {
+        id: modelId,
+        kind: "spice",
+        format:
+          definition.kind === "subcircuit" ? "spice-subcircuit" : "spice-model",
+        modelName: definition.name,
+        embeddedContent: report.embeddedContent,
+        sha256: report.sha256,
+        metadata: {
+          purpose: "Imported self-contained SPICE model",
+          license: "LicenseRef-Author-Defined",
+          sourceFileName: report.sourceFileName,
+          sourceSha256: report.sha256,
+        },
+      },
+    ],
   };
 }
 
@@ -165,15 +226,15 @@ export function updateDeviceModel(
   patch: Partial<DeviceModel>,
 ): DevicePack {
   const nextId = patch.id ?? modelId;
-  const device = pack.devices[0];
   return {
-    ...replacePrimaryDevice(pack, {
+    ...pack,
+    devices: pack.devices.map((device) => ({
       ...device,
       modelIds: device.modelIds.map((id) => (id === modelId ? nextId : id)),
       spiceBindings: (device.spiceBindings ?? []).map((binding) =>
         binding.modelId === modelId ? { ...binding, modelId: nextId } : binding,
       ),
-    }),
+    })),
     models: pack.models.map((model) =>
       model.id === modelId ? { ...model, ...patch } : model,
     ),
@@ -198,9 +259,10 @@ export function updateSpicePort(
   modelId: string,
   pinId: string,
   modelPort: string,
+  deviceId?: string,
 ): DevicePack {
-  const device = pack.devices[0];
-  return replacePrimaryDevice(pack, {
+  const device = authoredDevice(pack, deviceId);
+  return replaceAuthoredDeviceById(pack, device.id, {
     ...device,
     spiceBindings: (device.spiceBindings ?? []).map((binding) =>
       binding.modelId === modelId
@@ -219,15 +281,15 @@ export function removeDeviceModel(
   pack: DevicePack,
   modelId: string,
 ): DevicePack {
-  const device = pack.devices[0];
   return {
-    ...replacePrimaryDevice(pack, {
+    ...pack,
+    devices: pack.devices.map((device) => ({
       ...device,
       modelIds: device.modelIds.filter((id) => id !== modelId),
       spiceBindings: (device.spiceBindings ?? []).filter(
         (binding) => binding.modelId !== modelId,
       ),
-    }),
+    })),
     models: pack.models.filter((model) => model.id !== modelId),
   };
 }
@@ -269,13 +331,6 @@ export function removeDocument(pack: DevicePack, index: number): DevicePack {
   };
 }
 
-function primarySymbol(pack: DevicePack) {
-  return (
-    pack.symbols.find((symbol) => symbol.id === pack.devices[0].symbolId) ??
-    pack.symbols[0]
-  );
-}
-
 function replacePrimarySymbol(
   pack: DevicePack,
   symbol: DevicePack["symbols"][number],
@@ -286,13 +341,6 @@ function replacePrimarySymbol(
       candidate.id === symbol.id ? symbol : candidate,
     ),
   };
-}
-
-function replacePrimaryDevice(
-  pack: DevicePack,
-  device: DevicePack["devices"][number],
-): DevicePack {
-  return { ...pack, devices: [device, ...pack.devices.slice(1)] };
 }
 
 function defaultSpiceContent(modelName: string, pinCount: number): string {

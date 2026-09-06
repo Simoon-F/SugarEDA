@@ -1,9 +1,11 @@
 import { useEffect, useState } from "react";
-import { open } from "@tauri-apps/plugin-dialog";
+import { open, save } from "@tauri-apps/plugin-dialog";
 import {
   AlertTriangle,
   CheckCircle2,
   FileKey2,
+  FileDown,
+  FileUp,
   KeyRound,
   ShieldQuestion,
   Trash2,
@@ -86,6 +88,39 @@ export function DevicePackSignatureInspector({
           await api.inspectDevicePackSignature(packPath, signaturePath),
         );
       }
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : String(reason));
+    }
+  };
+  const importTrustedKey = async () => {
+    const path = await open({
+      multiple: false,
+      filters: [{ name: "SugarEDA trusted public key", extensions: ["json"] }],
+    });
+    if (typeof path !== "string") return;
+    try {
+      setError("");
+      setTrustedKeys(await api.importTrustedDevicePackKey(path));
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : String(reason));
+    }
+  };
+  const exportTrustedKey = async (key: TrustedDevicePackKey) => {
+    const safeId = key.keyId.replace(/[^a-zA-Z0-9._-]/g, "-") || "publisher";
+    const path = await save({
+      title: zh ? "导出可信公钥" : "Export trusted public key",
+      defaultPath: `${safeId}.sugareda-trusted-key.json`,
+      filters: [
+        {
+          name: "SugarEDA trusted public key",
+          extensions: ["sugareda-trusted-key.json"],
+        },
+      ],
+    });
+    if (!path) return;
+    try {
+      setError("");
+      await api.exportTrustedDevicePackKey(key.fingerprint, path);
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : String(reason));
     }
@@ -178,7 +213,12 @@ export function DevicePackSignatureInspector({
                 <KeyRound />
                 {zh ? "本地可信密钥" : "Locally trusted keys"}
               </span>
-              <small>{trustedKeys.length}</small>
+              <span className="trusted-key-list-actions">
+                <small>{trustedKeys.length}</small>
+                <button onClick={() => void importTrustedKey()}>
+                  <FileUp /> {zh ? "导入公钥" : "Import key"}
+                </button>
+              </span>
             </div>
             {trustedKeys.length === 0 ? (
               <p>
@@ -195,12 +235,20 @@ export function DevicePackSignatureInspector({
                       {key.keyId} · {key.fingerprint.slice(0, 16)}…
                     </code>
                   </span>
-                  <button
-                    onClick={() => void removeTrustedKey(key.fingerprint)}
-                    aria-label={zh ? "撤销信任" : "Remove trust"}
-                  >
-                    <Trash2 />
-                  </button>
+                  <span className="trusted-key-row-actions">
+                    <button
+                      onClick={() => void exportTrustedKey(key)}
+                      aria-label={zh ? "导出公钥" : "Export key"}
+                    >
+                      <FileDown />
+                    </button>
+                    <button
+                      onClick={() => void removeTrustedKey(key.fingerprint)}
+                      aria-label={zh ? "撤销信任" : "Remove trust"}
+                    >
+                      <Trash2 />
+                    </button>
+                  </span>
                 </div>
               ))
             )}

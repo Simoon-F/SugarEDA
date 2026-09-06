@@ -5,6 +5,7 @@ mod device_config;
 mod device_instance;
 mod device_pack;
 mod device_pack_authoring;
+mod device_pack_model_import;
 mod device_pack_signature;
 mod device_tree_adapter;
 mod domain;
@@ -24,9 +25,10 @@ use board_config::{
     apply_board_configuration_draft, export_board_configuration, validate_board_configuration_draft,
 };
 use device_pack_authoring::{export_device_pack_draft, validate_device_pack_draft};
+use device_pack_model_import::inspect_device_pack_spice_model_file;
 use device_pack_signature::{
-    inspect_device_pack_signature, list_trusted_device_pack_keys, remove_trusted_device_pack_key,
-    trust_device_pack_signature_key,
+    export_trusted_device_pack_key, import_trusted_device_pack_key, inspect_device_pack_signature,
+    list_trusted_device_pack_keys, remove_trusted_device_pack_key, trust_device_pack_signature_key,
 };
 use domain::Project;
 use simulation::{BackendStatus, NgSpiceBackend, SimulationBackend, SimulationResult};
@@ -418,10 +420,13 @@ pub fn run() {
             import_device_pack,
             validate_device_pack_draft,
             export_device_pack_draft,
+            inspect_device_pack_spice_model_file,
             inspect_device_pack_signature,
             list_trusted_device_pack_keys,
             trust_device_pack_signature_key,
             remove_trusted_device_pack_key,
+            import_trusted_device_pack_key,
+            export_trusted_device_pack_key,
             validate_adapter_contract,
             run_erc,
             inspect_sdk_adapter,

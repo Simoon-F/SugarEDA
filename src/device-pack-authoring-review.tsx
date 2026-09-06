@@ -44,7 +44,13 @@ export function DevicePackAuthoringReview({
         </div>
         <div>
           <dt>{zh ? "引脚" : "Pins"}</dt>
-          <dd>{report?.pinCount ?? pack.devices[0].pins.length}</dd>
+          <dd>
+            {report?.pinCount ??
+              pack.devices.reduce(
+                (total, device) => total + device.pins.length,
+                0,
+              )}
+          </dd>
         </div>
         <div>
           <dt>SHA-256</dt>

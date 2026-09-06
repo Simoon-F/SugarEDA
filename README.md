@@ -162,6 +162,7 @@ src-tauri/src/project.rs     项目校验和原子保存
 src-tauri/src/board_config/  板级配置来源、验证、持久化和项目级检查
 src-tauri/src/device_pack_authoring/ 器件包草稿校验和原子导出
 src-tauri/src/device_pack_signature/ Ed25519 分离签名验证
+src-tauri/src/device_pack_model_import/ 受限 SPICE 模型读取与检查
 src-tauri/src/adapter_contract/ 无执行的授权 Adapter v1 数据契约
 src-tauri/src/device_config/ 厂商无关配置 IR 与语义规则
 src-tauri/src/device_tree_adapter/ 受限 DTS 子集解析与 IR 转换
@@ -180,7 +181,7 @@ scripts/desktop-smoke.mjs    真实桌面 WebDriver 冒烟测试
 - 本地发布者信任是用户对具体 Ed25519 公钥指纹的显式认可，不是公共证书背书；当前不联网检查吊销状态。
 - 波形数据仍通过 Tauri JSON 命令边界传输；后续可替换为通道或二进制结果文件。
 - Windows/macOS 已配置桌面打包；Linux 主要用于自动化测试，发布包仍需单独验证。
-- 外部 `.include`、任意引脚映射、IBIS、加密厂商模型和自动下载尚未实现。
+- 外部 `.include`、依赖型或加密厂商模型、IBIS/S 参数求解和自动下载尚未实现；自包含 SPICE 文件可在制作工作台中经 Rust 检查后显式映射并内嵌。
 
 ---
 

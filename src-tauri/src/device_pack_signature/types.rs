@@ -36,3 +36,20 @@ pub(crate) struct TrustedDevicePackKey {
     pub fingerprint: String,
     pub trusted_at: String,
 }
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub(super) struct PortableTrustedDevicePackKey {
+    pub format_version: u32,
+    pub key_id: String,
+    pub signer: String,
+    pub public_key_base64: String,
+    pub fingerprint: String,
+}
+
+#[derive(Debug, Clone, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct TrustedDevicePackKeyExportReceipt {
+    pub path: String,
+    pub fingerprint: String,
+}

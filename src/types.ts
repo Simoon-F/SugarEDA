@@ -246,6 +246,17 @@ export type TrustedDevicePackKey = {
   fingerprint: string;
   trustedAt: string;
 };
+export type TrustedDevicePackKeyExportReceipt = {
+  path: string;
+  fingerprint: string;
+};
+export type DevicePackSpiceModelFileReport = {
+  sourceFileName: string;
+  bytes: number;
+  sha256: string;
+  definitions: SpiceModelDefinition[];
+  embeddedContent: string;
+};
 export type AdapterContractReport = {
   valid: boolean;
   executionAvailable: boolean;

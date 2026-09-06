@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { lazy, Suspense, useMemo, useState } from "react";
 import {
   Box,
   Check,
@@ -17,18 +17,31 @@ import type { ComponentPlacement, Project, Snapshot } from "./types";
 import { useI18n } from "./i18n";
 import { deviceCapabilities } from "./device-pack";
 import { DeviceUnitActions } from "./device-unit-actions";
-import {
-  SdkAdapterInspector,
-  type SdkInspectionTarget,
-} from "./sdk-adapter-inspector";
-import {
-  DeviceConfigInspector,
-  type DeviceConfigTarget,
-} from "./device-config-inspector";
+import type { SdkInspectionTarget } from "./sdk-adapter-inspector";
+import type { DeviceConfigTarget } from "./device-config-inspector";
 import { deviceConfigurationScope } from "./device-configuration";
 import { deviceConfigCanvasInstances } from "./device-config-location";
-import { DevicePackAuthoringEditor } from "./device-pack-authoring-editor";
-import { DevicePackSignatureInspector } from "./device-pack-signature-inspector";
+
+const SdkAdapterInspector = lazy(() =>
+  import("./sdk-adapter-inspector").then((module) => ({
+    default: module.SdkAdapterInspector,
+  })),
+);
+const DeviceConfigInspector = lazy(() =>
+  import("./device-config-inspector").then((module) => ({
+    default: module.DeviceConfigInspector,
+  })),
+);
+const DevicePackAuthoringEditor = lazy(() =>
+  import("./device-pack-authoring-editor").then((module) => ({
+    default: module.DevicePackAuthoringEditor,
+  })),
+);
+const DevicePackSignatureInspector = lazy(() =>
+  import("./device-pack-signature-inspector").then((module) => ({
+    default: module.DevicePackSignatureInspector,
+  })),
+);
 
 type Props = {
   open: boolean;
@@ -372,32 +385,42 @@ export function DevicePackManager({
           })}
         </div>
       </section>
-      <SdkAdapterInspector
-        target={sdkTarget}
-        language={language}
-        onClose={() => setSdkTarget(null)}
-      />
-      <DeviceConfigInspector
-        target={configTarget}
-        language={language}
-        onClose={() => setConfigTarget(null)}
-        onLocate={(componentId) => {
-          setConfigTarget(null);
-          onClose();
-          onLocate(componentId);
-        }}
-        onImported={onSnapshot}
-      />
-      <DevicePackAuthoringEditor
-        open={authoringOpen}
-        language={language}
-        onClose={() => setAuthoringOpen(false)}
-      />
-      <DevicePackSignatureInspector
-        open={signatureOpen}
-        language={language}
-        onClose={() => setSignatureOpen(false)}
-      />
+      <Suspense fallback={null}>
+        {sdkTarget && (
+          <SdkAdapterInspector
+            target={sdkTarget}
+            language={language}
+            onClose={() => setSdkTarget(null)}
+          />
+        )}
+        {configTarget && (
+          <DeviceConfigInspector
+            target={configTarget}
+            language={language}
+            onClose={() => setConfigTarget(null)}
+            onLocate={(componentId) => {
+              setConfigTarget(null);
+              onClose();
+              onLocate(componentId);
+            }}
+            onImported={onSnapshot}
+          />
+        )}
+        {authoringOpen && (
+          <DevicePackAuthoringEditor
+            open
+            language={language}
+            onClose={() => setAuthoringOpen(false)}
+          />
+        )}
+        {signatureOpen && (
+          <DevicePackSignatureInspector
+            open
+            language={language}
+            onClose={() => setSignatureOpen(false)}
+          />
+        )}
+      </Suspense>
     </div>
   );
 }

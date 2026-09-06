@@ -21,6 +21,8 @@ import type {
   DevicePackExportReceipt,
   DevicePackSignatureReport,
   TrustedDevicePackKey,
+  TrustedDevicePackKeyExportReceipt,
+  DevicePackSpiceModelFileReport,
   AdapterContractReport,
 } from "./types";
 export const isDesktop = () => "__TAURI_INTERNALS__" in window;
@@ -68,6 +70,21 @@ export const api = {
     invoke<TrustedDevicePackKey[]>("remove_trusted_device_pack_key", {
       fingerprint,
     }),
+  importTrustedDevicePackKey: (path: string) =>
+    invoke<TrustedDevicePackKey[]>("import_trusted_device_pack_key", { path }),
+  exportTrustedDevicePackKey: (fingerprint: string, path: string) =>
+    invoke<TrustedDevicePackKeyExportReceipt>(
+      "export_trusted_device_pack_key",
+      {
+        fingerprint,
+        path,
+      },
+    ),
+  inspectDevicePackSpiceModelFile: (path: string) =>
+    invoke<DevicePackSpiceModelFileReport>(
+      "inspect_device_pack_spice_model_file",
+      { path },
+    ),
   validateAdapterContract: (path: string) =>
     invoke<AdapterContractReport>("validate_adapter_contract", { path }),
   erc: () => invoke<ErcReport>("run_erc"),

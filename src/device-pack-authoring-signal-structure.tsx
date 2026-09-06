@@ -8,23 +8,25 @@ import {
   updateSymbolUnit,
 } from "./device-pack-authoring-advanced-draft";
 import type { DevicePack } from "./types";
+import { authoredDevice, authoredSymbol } from "./device-pack-authoring-scope";
 import "./device-pack-authoring-advanced.css";
 
 type Props = {
   pack: DevicePack;
+  deviceId: string;
   language: "zh-CN" | "en";
   onChange: (pack: DevicePack) => void;
 };
 
 export function DevicePackAuthoringSignalStructure({
   pack,
+  deviceId,
   language,
   onChange,
 }: Props) {
   const zh = language === "zh-CN";
-  const device = pack.devices[0];
-  const symbol =
-    pack.symbols.find((item) => item.id === device.symbolId) ?? pack.symbols[0];
+  const device = authoredDevice(pack, deviceId);
+  const symbol = authoredSymbol(pack, deviceId);
 
   return (
     <div className="pack-author-advanced">
@@ -42,7 +44,7 @@ export function DevicePackAuthoringSignalStructure({
 
       <div className="pack-author-subheading">
         <strong>{zh ? "多单元符号" : "Multi-unit symbol"}</strong>
-        <button onClick={() => onChange(addSymbolUnit(pack))}>
+        <button onClick={() => onChange(addSymbolUnit(pack, deviceId))}>
           <Plus />
           {zh ? "添加单元" : "Add unit"}
         </button>
@@ -54,7 +56,12 @@ export function DevicePackAuthoringSignalStructure({
               value={unit.id}
               onChange={(event) =>
                 onChange(
-                  updateSymbolUnit(pack, unit.id, { id: event.target.value }),
+                  updateSymbolUnit(
+                    pack,
+                    unit.id,
+                    { id: event.target.value },
+                    deviceId,
+                  ),
                 )
               }
               aria-label="Unit ID"
@@ -63,7 +70,12 @@ export function DevicePackAuthoringSignalStructure({
               value={unit.name}
               onChange={(event) =>
                 onChange(
-                  updateSymbolUnit(pack, unit.id, { name: event.target.value }),
+                  updateSymbolUnit(
+                    pack,
+                    unit.id,
+                    { name: event.target.value },
+                    deviceId,
+                  ),
                 )
               }
               aria-label="Unit name"
@@ -72,9 +84,14 @@ export function DevicePackAuthoringSignalStructure({
               value={unit.groups.join(", ")}
               onChange={(event) =>
                 onChange(
-                  updateSymbolUnit(pack, unit.id, {
-                    groups: splitList(event.target.value),
-                  }),
+                  updateSymbolUnit(
+                    pack,
+                    unit.id,
+                    {
+                      groups: splitList(event.target.value),
+                    },
+                    deviceId,
+                  ),
                 )
               }
               placeholder={zh ? "POWER, GPIO" : "POWER, GPIO"}
@@ -82,7 +99,9 @@ export function DevicePackAuthoringSignalStructure({
             />
             <button
               disabled={symbol.units.length <= 1}
-              onClick={() => onChange(removeSymbolUnit(pack, unit.id))}
+              onClick={() =>
+                onChange(removeSymbolUnit(pack, unit.id, deviceId))
+              }
               aria-label={zh ? "删除符号单元" : "Remove symbol unit"}
             >
               <Trash2 />
@@ -97,7 +116,7 @@ export function DevicePackAuthoringSignalStructure({
         </strong>
         <button
           disabled={device.pins.length < 2}
-          onClick={() => onChange(addDifferentialPair(pack))}
+          onClick={() => onChange(addDifferentialPair(pack, deviceId))}
         >
           <Plus />
           {zh ? "添加差分对" : "Add pair"}
@@ -113,9 +132,14 @@ export function DevicePackAuthoringSignalStructure({
               value={pair.id}
               onChange={(event) =>
                 onChange(
-                  updateDifferentialPair(pack, pair.id, {
-                    id: event.target.value,
-                  }),
+                  updateDifferentialPair(
+                    pack,
+                    pair.id,
+                    {
+                      id: event.target.value,
+                    },
+                    deviceId,
+                  ),
                 )
               }
               aria-label="Differential pair ID"
@@ -126,9 +150,14 @@ export function DevicePackAuthoringSignalStructure({
                 value={pair.positivePinId}
                 onChange={(event) =>
                   onChange(
-                    updateDifferentialPair(pack, pair.id, {
-                      positivePinId: event.target.value,
-                    }),
+                    updateDifferentialPair(
+                      pack,
+                      pair.id,
+                      {
+                        positivePinId: event.target.value,
+                      },
+                      deviceId,
+                    ),
                   )
                 }
               >
@@ -145,9 +174,14 @@ export function DevicePackAuthoringSignalStructure({
                 value={pair.negativePinId}
                 onChange={(event) =>
                   onChange(
-                    updateDifferentialPair(pack, pair.id, {
-                      negativePinId: event.target.value,
-                    }),
+                    updateDifferentialPair(
+                      pack,
+                      pair.id,
+                      {
+                        negativePinId: event.target.value,
+                      },
+                      deviceId,
+                    ),
                   )
                 }
               >
@@ -159,7 +193,9 @@ export function DevicePackAuthoringSignalStructure({
               </select>
             </label>
             <button
-              onClick={() => onChange(removeDifferentialPair(pack, pair.id))}
+              onClick={() =>
+                onChange(removeDifferentialPair(pack, pair.id, deviceId))
+              }
               aria-label={zh ? "删除差分对" : "Remove differential pair"}
             >
               <Trash2 />

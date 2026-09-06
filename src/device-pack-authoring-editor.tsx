@@ -19,6 +19,11 @@ import { DevicePackAuthoringManifest } from "./device-pack-authoring-manifest";
 import { DevicePackAuthoringModels } from "./device-pack-authoring-models";
 import { DevicePackAuthoringReview } from "./device-pack-authoring-review";
 import { DevicePackAuthoringSignalStructure } from "./device-pack-authoring-signal-structure";
+import { DevicePackAuthoringDeviceSwitcher } from "./device-pack-authoring-device-switcher";
+import {
+  addAuthoredDevice,
+  removeAuthoredDevice,
+} from "./device-pack-authoring-collection-draft";
 import type { DevicePack, DevicePackAuthoringReport } from "./types";
 import "./device-pack-authoring-editor.css";
 
@@ -36,6 +41,7 @@ export function DevicePackAuthoringEditor({
   const zh = language === "zh-CN";
   const desktopAvailable = isDesktop();
   const [pack, setPack] = useState<DevicePack>(() => createDevicePackDraft());
+  const [activeDeviceId, setActiveDeviceId] = useState("device");
   const [section, setSection] = useState<Section>("manifest");
   const [report, setReport] = useState<DevicePackAuthoringReport | null>(null);
   const [validating, setValidating] = useState(false);
@@ -46,7 +52,9 @@ export function DevicePackAuthoringEditor({
 
   useEffect(() => {
     if (!open) return;
-    setPack(createDevicePackDraft());
+    const draft = createDevicePackDraft();
+    setPack(draft);
+    setActiveDeviceId(draft.devices[0].id);
     setSection("manifest");
     setReport(null);
     setMessage("");
@@ -96,6 +104,16 @@ export function DevicePackAuthoringEditor({
   if (!open) return null;
 
   const changePack = (nextPack: DevicePack) => {
+    if (!nextPack.devices.some((device) => device.id === activeDeviceId)) {
+      const previousIndex = Math.max(
+        0,
+        pack.devices.findIndex((device) => device.id === activeDeviceId),
+      );
+      setActiveDeviceId(
+        nextPack.devices[Math.min(previousIndex, nextPack.devices.length - 1)]
+          .id,
+      );
+    }
     setPack(nextPack);
     setExported(false);
     setMessage("");
@@ -244,6 +262,22 @@ export function DevicePackAuthoringEditor({
         </nav>
 
         <main>
+          {section !== "manifest" && section !== "review" && (
+            <DevicePackAuthoringDeviceSwitcher
+              pack={pack}
+              activeDeviceId={activeDeviceId}
+              language={language}
+              onSelect={setActiveDeviceId}
+              onAdd={() => {
+                const result = addAuthoredDevice(pack);
+                changePack(result.pack);
+                setActiveDeviceId(result.deviceId);
+              }}
+              onRemove={(deviceId) =>
+                changePack(removeAuthoredDevice(pack, deviceId))
+              }
+            />
+          )}
           {section === "manifest" && (
             <DevicePackAuthoringManifest
               pack={pack}
@@ -259,6 +293,7 @@ export function DevicePackAuthoringEditor({
           {section === "pins" && (
             <DevicePackAuthoringDevice
               pack={pack}
+              deviceId={activeDeviceId}
               language={language}
               onChange={changePack}
             />
@@ -266,6 +301,7 @@ export function DevicePackAuthoringEditor({
           {section === "signals" && (
             <DevicePackAuthoringSignalStructure
               pack={pack}
+              deviceId={activeDeviceId}
               language={language}
               onChange={changePack}
             />
@@ -273,6 +309,7 @@ export function DevicePackAuthoringEditor({
           {section === "models" && (
             <DevicePackAuthoringModels
               pack={pack}
+              deviceId={activeDeviceId}
               language={language}
               onChange={changePack}
             />

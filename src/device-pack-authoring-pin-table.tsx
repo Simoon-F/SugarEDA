@@ -7,6 +7,7 @@ import {
   updateDevicePackPin,
 } from "./device-pack-authoring-draft";
 import type { DevicePack, PinElectricalType } from "./types";
+import { authoredDevice } from "./device-pack-authoring-scope";
 
 const electricalTypes: PinElectricalType[] = [
   "passive",
@@ -30,17 +31,19 @@ const directions = [
 
 type Props = {
   pack: DevicePack;
+  deviceId: string;
   language: "zh-CN" | "en";
   onChange: (pack: DevicePack) => void;
 };
 
 export function DevicePackAuthoringPinTable({
   pack,
+  deviceId,
   language,
   onChange,
 }: Props) {
   const zh = language === "zh-CN";
-  const device = pack.devices[0];
+  const device = authoredDevice(pack, deviceId);
 
   return (
     <>
@@ -48,7 +51,7 @@ export function DevicePackAuthoringPinTable({
         <strong>
           {zh ? `引脚 ${device.pins.length}` : `${device.pins.length} pins`}
         </strong>
-        <button onClick={() => onChange(addDevicePackPin(pack))}>
+        <button onClick={() => onChange(addDevicePackPin(pack, deviceId))}>
           <Plus />
           {zh ? "添加引脚" : "Add pin"}
         </button>
@@ -79,9 +82,14 @@ export function DevicePackAuthoringPinTable({
                   value={pin.id}
                   onChange={(event) =>
                     onChange(
-                      updateDevicePackPin(pack, pin.id, {
-                        id: event.target.value,
-                      }),
+                      updateDevicePackPin(
+                        pack,
+                        pin.id,
+                        {
+                          id: event.target.value,
+                        },
+                        deviceId,
+                      ),
                     )
                   }
                 />
@@ -89,9 +97,14 @@ export function DevicePackAuthoringPinTable({
                   value={pin.number}
                   onChange={(event) =>
                     onChange(
-                      updateDevicePackPin(pack, pin.id, {
-                        number: event.target.value,
-                      }),
+                      updateDevicePackPin(
+                        pack,
+                        pin.id,
+                        {
+                          number: event.target.value,
+                        },
+                        deviceId,
+                      ),
                     )
                   }
                 />
@@ -101,9 +114,14 @@ export function DevicePackAuthoringPinTable({
                   value={pin.name}
                   onChange={(event) =>
                     onChange(
-                      updateDevicePackPin(pack, pin.id, {
-                        name: event.target.value,
-                      }),
+                      updateDevicePackPin(
+                        pack,
+                        pin.id,
+                        {
+                          name: event.target.value,
+                        },
+                        deviceId,
+                      ),
                     )
                   }
                 />
@@ -111,9 +129,14 @@ export function DevicePackAuthoringPinTable({
                   value={pin.group}
                   onChange={(event) =>
                     onChange(
-                      updateDevicePackPin(pack, pin.id, {
-                        group: event.target.value,
-                      }),
+                      updateDevicePackPin(
+                        pack,
+                        pin.id,
+                        {
+                          group: event.target.value,
+                        },
+                        deviceId,
+                      ),
                     )
                   }
                 />
@@ -123,9 +146,15 @@ export function DevicePackAuthoringPinTable({
                   value={pin.electricalType}
                   onChange={(event) =>
                     onChange(
-                      updateDevicePackPin(pack, pin.id, {
-                        electricalType: event.target.value as PinElectricalType,
-                      }),
+                      updateDevicePackPin(
+                        pack,
+                        pin.id,
+                        {
+                          electricalType: event.target
+                            .value as PinElectricalType,
+                        },
+                        deviceId,
+                      ),
                     )
                   }
                 >
@@ -137,9 +166,14 @@ export function DevicePackAuthoringPinTable({
                   value={pin.direction}
                   onChange={(event) =>
                     onChange(
-                      updateDevicePackPin(pack, pin.id, {
-                        direction: event.target.value,
-                      }),
+                      updateDevicePackPin(
+                        pack,
+                        pin.id,
+                        {
+                          direction: event.target.value,
+                        },
+                        deviceId,
+                      ),
                     )
                   }
                 >
@@ -173,6 +207,7 @@ export function DevicePackAuthoringPinTable({
                         pack,
                         pin.id,
                         event.target.value.split(","),
+                        deviceId,
                       ),
                     )
                   }
@@ -188,7 +223,13 @@ export function DevicePackAuthoringPinTable({
                       checked={hasRule(kind)}
                       onChange={(event) =>
                         onChange(
-                          setPinRule(pack, pin.id, kind, event.target.checked),
+                          setPinRule(
+                            pack,
+                            pin.id,
+                            kind,
+                            event.target.checked,
+                            deviceId,
+                          ),
                         )
                       }
                     />
@@ -201,7 +242,9 @@ export function DevicePackAuthoringPinTable({
                 ))}
               </span>
               <button
-                onClick={() => onChange(removeDevicePackPin(pack, pin.id))}
+                onClick={() =>
+                  onChange(removeDevicePackPin(pack, pin.id, deviceId))
+                }
                 disabled={device.pins.length <= 1}
                 aria-label={zh ? "删除引脚" : "Remove pin"}
               >

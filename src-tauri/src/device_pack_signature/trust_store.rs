@@ -1,4 +1,4 @@
-use super::{DetachedDevicePackSignature, TrustedDevicePackKey};
+use super::{DetachedDevicePackSignature, PortableTrustedDevicePackKey, TrustedDevicePackKey};
 use base64::{engine::general_purpose::STANDARD, Engine};
 use chrono::Utc;
 use serde::{Deserialize, Serialize};
@@ -86,6 +86,52 @@ impl DevicePackTrustStore {
         Ok(keys)
     }
 
+    pub(super) fn import_portable(
+        &self,
+        key: PortableTrustedDevicePackKey,
+    ) -> Result<Vec<TrustedDevicePackKey>, String> {
+        validate_portable(&key)?;
+        let mut keys = self.list()?;
+        keys.retain(|current| current.fingerprint != key.fingerprint);
+        if keys.len() >= MAX_TRUSTED_KEYS {
+            return Err(format!(
+                "DevicePack trust store is limited to {MAX_TRUSTED_KEYS} keys"
+            ));
+        }
+        keys.push(TrustedDevicePackKey {
+            key_id: key.key_id,
+            signer: key.signer,
+            public_key_base64: key.public_key_base64,
+            fingerprint: key.fingerprint,
+            trusted_at: Utc::now().to_rfc3339(),
+        });
+        keys.sort_by(|left, right| {
+            left.signer
+                .cmp(&right.signer)
+                .then(left.key_id.cmp(&right.key_id))
+        });
+        self.write(&keys)?;
+        Ok(keys)
+    }
+
+    pub(super) fn portable(
+        &self,
+        fingerprint_value: &str,
+    ) -> Result<PortableTrustedDevicePackKey, String> {
+        let key = self
+            .list()?
+            .into_iter()
+            .find(|key| key.fingerprint == fingerprint_value)
+            .ok_or_else(|| "Trusted DevicePack key was not found".to_owned())?;
+        Ok(PortableTrustedDevicePackKey {
+            format_version: 1,
+            key_id: key.key_id,
+            signer: key.signer,
+            public_key_base64: key.public_key_base64,
+            fingerprint: key.fingerprint,
+        })
+    }
+
     fn write(&self, keys: &[TrustedDevicePackKey]) -> Result<(), String> {
         let parent = self
             .path
@@ -150,6 +196,18 @@ fn valid_fingerprint(value: &str) -> bool {
             .all(|character| character.is_ascii_digit() || ('a'..='f').contains(&character))
 }
 
+pub(super) fn validate_portable(key: &PortableTrustedDevicePackKey) -> Result<(), String> {
+    if key.format_version != 1
+        || !safe_text(&key.key_id, 128)
+        || !safe_text(&key.signer, 256)
+        || !valid_fingerprint(&key.fingerprint)
+        || fingerprint(&key.public_key_base64)? != key.fingerprint
+    {
+        return Err("Portable DevicePack trusted key is invalid".into());
+    }
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -193,5 +251,26 @@ mod tests {
         std::fs::write(&path, serde_json::to_vec(&document).unwrap()).unwrap();
         let store = DevicePackTrustStore::new(path);
         assert!(store.list().is_err());
+    }
+
+    #[test]
+    fn portable_key_round_trips_and_rejects_tampering() {
+        let directory = tempfile::tempdir().unwrap();
+        let store = DevicePackTrustStore::new(directory.path().join("trusted-keys.json"));
+        let key = SigningKey::from_bytes(&[17_u8; 32]);
+        let public_key_base64 = STANDARD.encode(key.verifying_key().as_bytes());
+        let portable = PortableTrustedDevicePackKey {
+            format_version: 1,
+            key_id: "portable-key".into(),
+            signer: "SugarEDA Test Publisher".into(),
+            fingerprint: fingerprint(&public_key_base64).unwrap(),
+            public_key_base64,
+        };
+        let imported = store.import_portable(portable.clone()).unwrap();
+        assert_eq!(imported.len(), 1);
+        assert_eq!(store.portable(&portable.fingerprint).unwrap(), portable);
+        let mut tampered = portable;
+        tampered.fingerprint = "0".repeat(64);
+        assert!(store.import_portable(tampered).is_err());
     }
 }

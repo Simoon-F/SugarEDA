@@ -1,4 +1,8 @@
 import type { DevicePack, DevicePackPin, PinElectricalType } from "./types";
+import {
+  authoredDevice,
+  replaceAuthoredDeviceById,
+} from "./device-pack-authoring-scope";
 
 export function createDevicePackDraft(): DevicePack {
   return {
@@ -47,24 +51,29 @@ export function createDevicePackDraft(): DevicePack {
   };
 }
 
-export function addDevicePackPin(pack: DevicePack): DevicePack {
-  const usedNumbers = new Set(pack.devices[0].pins.map((pin) => pin.number));
-  let number = pack.devices[0].pins.length + 1;
+export function addDevicePackPin(
+  pack: DevicePack,
+  deviceId?: string,
+): DevicePack {
+  const device = authoredDevice(pack, deviceId);
+  const usedNumbers = new Set(device.pins.map((pin) => pin.number));
+  let number = device.pins.length + 1;
   while (usedNumbers.has(String(number))) number += 1;
-  return replacePins(pack, [...pack.devices[0].pins, defaultPin(number)]);
+  return replacePins(pack, [...device.pins, defaultPin(number)], deviceId);
 }
 
 export function updateDevicePackPin(
   pack: DevicePack,
   pinId: string,
   patch: Partial<DevicePackPin>,
+  deviceId?: string,
 ): DevicePack {
   const nextId = patch.id ?? pinId;
-  const device = pack.devices[0];
+  const device = authoredDevice(pack, deviceId);
   const renamed =
     nextId === pinId
       ? pack
-      : replaceDevice(pack, {
+      : replaceAuthoredDeviceById(pack, deviceId, {
           ...device,
           alternateFunctions: device.alternateFunctions.map((item) =>
             item.pinId === pinId ? { ...item, pinId: nextId } : item,
@@ -87,22 +96,27 @@ export function updateDevicePackPin(
             ),
           })),
         });
+  const renamedDevice = authoredDevice(renamed, device.id);
   return replacePins(
     renamed,
-    renamed.devices[0].pins.map((pin) =>
+    renamedDevice.pins.map((pin) =>
       pin.id === pinId ? { ...pin, ...patch } : pin,
     ),
+    renamedDevice.id,
   );
 }
 
 export function removeDevicePackPin(
   pack: DevicePack,
   pinId: string,
+  deviceId?: string,
 ): DevicePack {
-  if (pack.devices[0].pins.length <= 1) return pack;
+  const device = authoredDevice(pack, deviceId);
+  if (device.pins.length <= 1) return pack;
   return replacePins(
     pack,
-    pack.devices[0].pins.filter((pin) => pin.id !== pinId),
+    device.pins.filter((pin) => pin.id !== pinId),
+    device.id,
   );
 }
 
@@ -110,12 +124,13 @@ export function setPinAlternateFunctions(
   pack: DevicePack,
   pinId: string,
   functions: string[],
+  deviceId?: string,
 ): DevicePack {
   const clean = [
     ...new Set(functions.map((item) => item.trim()).filter(Boolean)),
   ];
-  const device = pack.devices[0];
-  return replaceDevice(pack, {
+  const device = authoredDevice(pack, deviceId);
+  return replaceAuthoredDeviceById(pack, device.id, {
     ...device,
     alternateFunctions: [
       ...device.alternateFunctions.filter((item) => item.pinId !== pinId),
@@ -129,14 +144,16 @@ export function setPinRule(
   pinId: string,
   kind: string,
   enabled: boolean,
+  deviceId?: string,
 ): DevicePack {
-  const device = pack.devices[0];
+  const device = authoredDevice(pack, deviceId);
   const ruleId = `author-${kind}`;
-  const current = device.rules.find((rule) => rule.id === ruleId);
-  const pinIds = new Set(current?.pinIds ?? []);
+  const pinIds = new Set(
+    device.rules.find((rule) => rule.id === ruleId)?.pinIds ?? [],
+  );
   if (enabled) pinIds.add(pinId);
   else pinIds.delete(pinId);
-  return replaceDevice(pack, {
+  return replaceAuthoredDeviceById(pack, device.id, {
     ...device,
     rules: [
       ...device.rules.filter((rule) => rule.id !== ruleId),
@@ -147,12 +164,15 @@ export function setPinRule(
   });
 }
 
-export function addVoltageDomain(pack: DevicePack): DevicePack {
-  const device = pack.devices[0];
+export function addVoltageDomain(
+  pack: DevicePack,
+  deviceId?: string,
+): DevicePack {
+  const device = authoredDevice(pack, deviceId);
   let suffix = device.voltageDomains.length + 1;
   while (device.voltageDomains.some((domain) => domain.id === `vdd${suffix}`))
     suffix += 1;
-  return replaceDevice(pack, {
+  return replaceAuthoredDeviceById(pack, device.id, {
     ...device,
     voltageDomains: [
       ...device.voltageDomains,
@@ -169,9 +189,10 @@ export function addVoltageDomain(pack: DevicePack): DevicePack {
 export function removeVoltageDomain(
   pack: DevicePack,
   domainId: string,
+  deviceId?: string,
 ): DevicePack {
-  const device = pack.devices[0];
-  return replaceDevice(pack, {
+  const device = authoredDevice(pack, deviceId);
+  return replaceAuthoredDeviceById(pack, device.id, {
     ...device,
     pins: device.pins.map((pin) =>
       pin.voltageDomainId === domainId
@@ -188,9 +209,10 @@ export function updateVoltageDomain(
   pack: DevicePack,
   domainId: string,
   patch: Partial<DevicePack["devices"][number]["voltageDomains"][number]>,
+  deviceId?: string,
 ): DevicePack {
-  const device = pack.devices[0];
-  return replaceDevice(pack, {
+  const device = authoredDevice(pack, deviceId);
+  return replaceAuthoredDeviceById(pack, device.id, {
     ...device,
     voltageDomains: device.voltageDomains.map((domain) =>
       domain.id === domainId ? { ...domain, ...patch } : domain,
@@ -209,8 +231,10 @@ export function updateVoltageDomain(
 export function updatePrimaryDevice(
   pack: DevicePack,
   patch: Partial<DevicePack["devices"][number]>,
+  deviceId?: string,
 ): DevicePack {
-  return replaceDevice(pack, { ...pack.devices[0], ...patch });
+  const device = authoredDevice(pack, deviceId);
+  return replaceAuthoredDeviceById(pack, device.id, { ...device, ...patch });
 }
 
 const defaultPin = (number: number): DevicePackPin => ({
@@ -223,11 +247,15 @@ const defaultPin = (number: number): DevicePackPin => ({
   voltageDomainId: null,
 });
 
-function replacePins(pack: DevicePack, pins: DevicePackPin[]): DevicePack {
+function replacePins(
+  pack: DevicePack,
+  pins: DevicePackPin[],
+  deviceId?: string,
+): DevicePack {
   const pinIds = new Set(pins.map((pin) => pin.id));
-  const device = pack.devices[0];
+  const device = authoredDevice(pack, deviceId);
   return syncGeneratedReferences(
-    replaceDevice(pack, {
+    replaceAuthoredDeviceById(pack, device.id, {
       ...device,
       pins,
       alternateFunctions: device.alternateFunctions.filter((item) =>
@@ -245,38 +273,25 @@ function replacePins(pack: DevicePack, pins: DevicePackPin[]): DevicePack {
       ),
       spiceBindings: (device.spiceBindings ?? []).map((binding) => ({
         ...binding,
-        ports: pins.map(
-          (pin, index) =>
-            binding.ports.find((port) => port.pinId === pin.id) ?? {
-              modelPort: `P${index + 1}`,
-              pinId: pin.id,
-            },
-        ),
+        ports: binding.ports.filter((port) => pinIds.has(port.pinId)),
       })),
     }),
+    device.id,
   );
 }
 
-function replaceDevice(
+function syncGeneratedReferences(
   pack: DevicePack,
-  device: DevicePack["devices"][number],
+  deviceId?: string,
 ): DevicePack {
-  return { ...pack, devices: [device, ...pack.devices.slice(1)] };
-}
-
-function syncGeneratedReferences(pack: DevicePack): DevicePack {
-  const device = pack.devices[0];
+  const device = authoredDevice(pack, deviceId);
   const groups = [...new Set(device.pins.map((pin) => pin.group))];
   return {
     ...pack,
     symbols: pack.symbols.map((symbol) => {
       if (symbol.id !== device.symbolId) return symbol;
-      if (symbol.units.length <= 1) {
-        return {
-          ...symbol,
-          units: [{ id: "main", name: "Main", groups }],
-        };
-      }
+      if (symbol.units.length <= 1)
+        return { ...symbol, units: [{ id: "main", name: "Main", groups }] };
       const available = new Set(groups);
       const units = symbol.units.map((unit) => ({
         ...unit,

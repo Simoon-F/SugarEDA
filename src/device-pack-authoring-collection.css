@@ -1,0 +1,136 @@
+.pack-device-switcher {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  max-width: 1030px;
+  margin: 0 auto 14px;
+  padding: 7px;
+  background: #eef2f5;
+  border: 1px solid var(--line-dark);
+  border-radius: 9px;
+}
+.pack-device-switcher-label {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  padding: 0 5px;
+  color: #526878;
+  font-size: 8px;
+  font-weight: 800;
+  white-space: nowrap;
+}
+.pack-device-switcher-items {
+  display: flex;
+  flex: 1;
+  gap: 5px;
+  min-width: 0;
+  overflow-x: auto;
+}
+.pack-device-switcher-items > div {
+  display: flex;
+  align-items: center;
+  min-width: 120px;
+  height: 31px;
+  color: #566977;
+  background: #fff;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+}
+.pack-device-switcher-items > div.active {
+  color: #174f75;
+  border-color: #7eaac5;
+  box-shadow: inset 0 -2px #2d789f;
+}
+.pack-device-switcher-items > div > button:first-child {
+  min-width: 0;
+  flex: 1;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0 7px;
+  color: inherit;
+  background: transparent;
+  border: 0;
+}
+.pack-device-switcher-items small {
+  color: #82919b;
+  font:
+    7px ui-monospace,
+    monospace;
+}
+.pack-device-switcher-items span {
+  flex: 1;
+  overflow: hidden;
+  font-size: 8px;
+  font-weight: 750;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.pack-device-switcher-items .remove {
+  display: grid;
+  width: 20px;
+  height: 20px;
+  place-items: center;
+  color: #a43a45;
+  background: transparent;
+  border: 0;
+  border-radius: 4px;
+}
+.pack-device-switcher-items .remove:hover {
+  background: #fff0f1;
+}
+.pack-device-switcher-items svg,
+.pack-device-add svg {
+  width: 12px;
+}
+.pack-device-add {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  height: 31px;
+  padding: 0 9px;
+  color: #174f75;
+  background: #fff;
+  border: 1px solid #bdd9e8;
+  border-radius: 6px;
+  font-size: 8px;
+  font-weight: 750;
+  white-space: nowrap;
+}
+.pack-author-package {
+  display: grid;
+  grid-template-columns: 170px repeat(3, minmax(0, 1fr));
+  gap: 8px;
+  align-items: end;
+  margin-top: 10px;
+  padding: 10px;
+  background: #f9fbfc;
+  border: 1px solid var(--line-dark);
+  border-radius: 8px;
+}
+.pack-author-package > div {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  color: #315c77;
+}
+.pack-author-package > div span,
+.pack-author-package label {
+  display: grid;
+  gap: 3px;
+}
+.pack-author-package b {
+  font-size: 9px;
+}
+.pack-author-package small,
+.pack-author-package label span {
+  color: #72818b;
+  font-size: 7px;
+}
+.pack-author-package input {
+  width: 100%;
+  height: 29px;
+  padding: 0 7px;
+  font-size: 8px;
+}
