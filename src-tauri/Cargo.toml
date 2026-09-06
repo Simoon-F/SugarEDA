@@ -1,6 +1,6 @@
 [package]
 name = "sugareda"
-version = "0.2.0"
+version = "0.3.0"
 description = "A focused, cross-platform schematic capture and SPICE simulation workbench"
 authors = ["SugarEDA contributors"]
 edition = "2021"
