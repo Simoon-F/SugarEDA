@@ -59,9 +59,37 @@ export function updateDevicePackPin(
   pinId: string,
   patch: Partial<DevicePackPin>,
 ): DevicePack {
+  const nextId = patch.id ?? pinId;
+  const device = pack.devices[0];
+  const renamed =
+    nextId === pinId
+      ? pack
+      : replaceDevice(pack, {
+          ...device,
+          alternateFunctions: device.alternateFunctions.map((item) =>
+            item.pinId === pinId ? { ...item, pinId: nextId } : item,
+          ),
+          rules: device.rules.map((rule) => ({
+            ...rule,
+            pinIds: rule.pinIds.map((id) => (id === pinId ? nextId : id)),
+          })),
+          differentialPairs: device.differentialPairs.map((pair) => ({
+            ...pair,
+            positivePinId:
+              pair.positivePinId === pinId ? nextId : pair.positivePinId,
+            negativePinId:
+              pair.negativePinId === pinId ? nextId : pair.negativePinId,
+          })),
+          spiceBindings: (device.spiceBindings ?? []).map((binding) => ({
+            ...binding,
+            ports: binding.ports.map((port) =>
+              port.pinId === pinId ? { ...port, pinId: nextId } : port,
+            ),
+          })),
+        });
   return replacePins(
-    pack,
-    pack.devices[0].pins.map((pin) =>
+    renamed,
+    renamed.devices[0].pins.map((pin) =>
       pin.id === pinId ? { ...pin, ...patch } : pin,
     ),
   );
@@ -215,6 +243,16 @@ function replacePins(pack: DevicePack, pins: DevicePackPin[]): DevicePack {
         (pair) =>
           pinIds.has(pair.positivePinId) && pinIds.has(pair.negativePinId),
       ),
+      spiceBindings: (device.spiceBindings ?? []).map((binding) => ({
+        ...binding,
+        ports: pins.map(
+          (pin, index) =>
+            binding.ports.find((port) => port.pinId === pin.id) ?? {
+              modelPort: `P${index + 1}`,
+              pinId: pin.id,
+            },
+        ),
+      })),
     }),
   );
 }
@@ -231,14 +269,29 @@ function syncGeneratedReferences(pack: DevicePack): DevicePack {
   const groups = [...new Set(device.pins.map((pin) => pin.group))];
   return {
     ...pack,
-    symbols: pack.symbols.map((symbol) =>
-      symbol.id === device.symbolId
-        ? {
-            ...symbol,
-            units: [{ id: "main", name: "Main", groups }],
-          }
-        : symbol,
-    ),
+    symbols: pack.symbols.map((symbol) => {
+      if (symbol.id !== device.symbolId) return symbol;
+      if (symbol.units.length <= 1) {
+        return {
+          ...symbol,
+          units: [{ id: "main", name: "Main", groups }],
+        };
+      }
+      const available = new Set(groups);
+      const units = symbol.units.map((unit) => ({
+        ...unit,
+        groups: unit.groups.filter((group) => available.has(group)),
+      }));
+      const assigned = new Set(units.flatMap((unit) => unit.groups));
+      units[0] = {
+        ...units[0],
+        groups: [
+          ...units[0].groups,
+          ...groups.filter((group) => !assigned.has(group)),
+        ],
+      };
+      return { ...symbol, units };
+    }),
     packages: pack.packages.map((item) =>
       item.id === device.packageId
         ? { ...item, pads: device.pins.map((pin) => pin.number) }

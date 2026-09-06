@@ -24,7 +24,10 @@ use board_config::{
     apply_board_configuration_draft, export_board_configuration, validate_board_configuration_draft,
 };
 use device_pack_authoring::{export_device_pack_draft, validate_device_pack_draft};
-use device_pack_signature::inspect_device_pack_signature;
+use device_pack_signature::{
+    inspect_device_pack_signature, list_trusted_device_pack_keys, remove_trusted_device_pack_key,
+    trust_device_pack_signature_key,
+};
 use domain::Project;
 use simulation::{BackendStatus, NgSpiceBackend, SimulationBackend, SimulationResult};
 use std::{path::PathBuf, sync::Mutex};
@@ -416,6 +419,9 @@ pub fn run() {
             validate_device_pack_draft,
             export_device_pack_draft,
             inspect_device_pack_signature,
+            list_trusted_device_pack_keys,
+            trust_device_pack_signature_key,
+            remove_trusted_device_pack_key,
             validate_adapter_contract,
             run_erc,
             inspect_sdk_adapter,

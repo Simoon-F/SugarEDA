@@ -195,6 +195,8 @@ export type DevicePack = {
     kind: "spice" | "ibis" | "sParameter";
     format: string;
     modelName?: string | null;
+    embeddedContent?: string | null;
+    sha256?: string | null;
     metadata: Record<string, string>;
   }[];
   sdkAdapters: {
@@ -232,9 +234,17 @@ export type DevicePackSignatureReport = {
   keyId: string;
   signer: string;
   packSha256: string;
+  publicKeyFingerprint: string;
   code: string;
   messageZh: string;
   messageEn: string;
+};
+export type TrustedDevicePackKey = {
+  keyId: string;
+  signer: string;
+  publicKeyBase64: string;
+  fingerprint: string;
+  trustedAt: string;
 };
 export type AdapterContractReport = {
   valid: boolean;

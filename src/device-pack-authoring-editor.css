@@ -1,5 +1,4 @@
-.pack-author-backdrop,
-.pack-signature-backdrop {
+.pack-author-backdrop {
   position: fixed;
   inset: 0;
   z-index: 150;
@@ -56,20 +55,17 @@
   border: 1px solid #bdd9e8;
   border-radius: 10px;
 }
-.pack-author svg,
-.pack-signature-dialog svg {
+.pack-author svg {
   width: 16px;
 }
 .pack-author-title small,
-.pack-author-heading small,
-.pack-signature-dialog header small {
+.pack-author-heading small {
   color: #567080;
   font-size: 8px;
   font-weight: 800;
   letter-spacing: 0.12em;
 }
-.pack-author h2,
-.pack-signature-dialog h2 {
+.pack-author h2 {
   margin: 2px 0 0;
   font-size: 17px;
 }
@@ -93,8 +89,7 @@
     8px ui-monospace,
     monospace;
 }
-.pack-author > header > button,
-.pack-signature-dialog header > button {
+.pack-author > header > button {
   width: 34px;
   height: 34px;
   justify-content: center;
@@ -107,10 +102,12 @@
   display: flex;
   gap: 3px;
   padding: 5px 18px 0;
+  overflow-x: auto;
   background: #eef1f4;
   border-bottom: 1px solid var(--line-dark);
 }
 .pack-author-tabs button {
+  flex: 0 0 auto;
   height: 37px;
   gap: 6px;
   padding: 0 13px;
@@ -141,6 +138,8 @@
 }
 .pack-author-form,
 .pack-author-device,
+.pack-author-advanced,
+.pack-author-models,
 .pack-author-review {
   max-width: 1030px;
   margin: 0 auto;
@@ -404,8 +403,7 @@
 .pack-author > footer > span.valid {
   color: #176e49;
 }
-.pack-author > footer button,
-.pack-signature-dialog footer button {
+.pack-author > footer button {
   height: 34px;
   justify-content: center;
   gap: 6px;
@@ -417,8 +415,7 @@
   font-size: 9px;
   font-weight: 750;
 }
-.pack-author > footer button.secondary,
-.pack-signature-dialog footer button.secondary {
+.pack-author > footer button.secondary {
   color: #4d5d69;
   background: #fff;
   border-color: var(--line-dark);
@@ -461,105 +458,6 @@
   color: #fff;
   background: #a43a45;
   border-color: #a43a45;
-}
-.pack-signature-backdrop {
-  z-index: 160;
-}
-.pack-signature-dialog {
-  width: min(610px, 92vw);
-  overflow: hidden;
-  background: #f6f8f9;
-  border: 1px solid var(--line-dark);
-  border-radius: 13px;
-  box-shadow: var(--shadow-floating);
-}
-.pack-signature-dialog header,
-.pack-signature-dialog header > div,
-.pack-signature-dialog header > div > span,
-.pack-signature-dialog main,
-.pack-signature-dialog footer,
-.pack-signature-dialog main > button,
-.signature-result {
-  display: flex;
-}
-.pack-signature-dialog header {
-  align-items: center;
-  justify-content: space-between;
-  padding: 13px 15px;
-  background: #fff;
-  border-bottom: 1px solid var(--line);
-}
-.pack-signature-dialog header > div {
-  gap: 9px;
-  align-items: center;
-}
-.pack-signature-dialog header > div > span {
-  flex-direction: column;
-  align-items: flex-start;
-}
-.pack-signature-dialog main {
-  flex-direction: column;
-  gap: 8px;
-  padding: 15px;
-}
-.pack-signature-dialog main > p {
-  margin: 0 0 4px;
-  color: var(--text-muted);
-  font-size: 9px;
-  line-height: 1.5;
-}
-.pack-signature-dialog main > button {
-  height: 37px;
-  align-items: center;
-  gap: 7px;
-  padding: 0 10px;
-  overflow: hidden;
-  color: #174f75;
-  text-align: left;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  background: #fff;
-  border: 1px solid var(--line-dark);
-  border-radius: 7px;
-}
-.signature-result {
-  gap: 9px;
-  align-items: flex-start;
-  margin-top: 5px;
-  padding: 10px;
-  color: #a43a45;
-  background: #fff3f4;
-  border: 1px solid #f1c8cc;
-  border-radius: 8px;
-  font-size: 9px;
-}
-.signature-result.valid {
-  color: #176e49;
-  background: #edf8f2;
-  border-color: #cbe8d8;
-}
-.signature-result > span {
-  min-width: 0;
-  display: grid;
-  gap: 3px;
-}
-.signature-result code,
-.signature-result small {
-  overflow: hidden;
-  font-size: 8px;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.signature-result p {
-  margin: 0;
-  line-height: 1.4;
-}
-.pack-signature-dialog footer {
-  justify-content: flex-end;
-  gap: 7px;
-  padding: 10px 14px;
-  background: #fff;
-  border-top: 1px solid var(--line);
 }
 @media (max-width: 820px) {
   .pack-author-fields.two-column,

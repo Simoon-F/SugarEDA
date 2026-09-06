@@ -21,9 +21,11 @@
 - 未使用的器件包可从工程安全移除；仍被实例引用时拒绝，操作支持撤销。
 - 三个 CC0 虚构测试包：模拟器件、带 PinMux 的 MCU、144 球多电源域 SoC。
 - 可视化 DevicePack L1/L2/L5 制作基础、Rust 权威导出和 Ed25519 分离签名验证；未知公钥不会被标记为可信厂商。
+- 高级制作支持多单元符号、差分对、SPICE 完整端口绑定、IBIS/S 参数元数据和资料来源；发布密钥可在验证后显式加入或撤销本地信任库。
 
 可视化配置编辑器的交互、模块和安全边界见 [P3 第八阶段文档](docs/p3-phase8-visual-board-configuration-editor.md)。
 器件包制作、签名格式和无执行 Adapter 契约见 [P3 第九阶段文档](docs/p3-phase9-devicepack-authoring-and-adapter-contract.md)。
+高级制作与本地发布者信任模型见 [P3 第十阶段文档](docs/p3-phase10-advanced-devicepack-authoring-and-trust.md)。
 
 ### 原理图编辑
 
@@ -175,6 +177,7 @@ scripts/desktop-smoke.mjs    真实桌面 WebDriver 冒烟测试
 - 当前一次编辑一张原理图。
 - L5 提供 Rust 权威实时校验、可视化 PinMux/启动/电压配置和确定性 JSON/独立 DTS 子集导出；不解析通用 DTS、厂商 SDK 或 Device Tree include。
 - Adapter Contract v1 仅验证清单和数据 DTO，明确不执行进程、动态库或脚本；签名有效也不等于发布者身份受信任。
+- 本地发布者信任是用户对具体 Ed25519 公钥指纹的显式认可，不是公共证书背书；当前不联网检查吊销状态。
 - 波形数据仍通过 Tauri JSON 命令边界传输；后续可替换为通道或二进制结果文件。
 - Windows/macOS 已配置桌面打包；Linux 主要用于自动化测试，发布包仍需单独验证。
 - 外部 `.include`、任意引脚映射、IBIS、加密厂商模型和自动下载尚未实现。

@@ -1,14 +1,17 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { open } from "@tauri-apps/plugin-dialog";
 import {
   AlertTriangle,
   CheckCircle2,
   FileKey2,
+  KeyRound,
   ShieldQuestion,
+  Trash2,
   X,
 } from "lucide-react";
 import { api, isDesktop } from "./bridge";
-import type { DevicePackSignatureReport } from "./types";
+import type { DevicePackSignatureReport, TrustedDevicePackKey } from "./types";
+import "./device-pack-signature-inspector.css";
 
 export function DevicePackSignatureInspector({
   open: visible,
@@ -23,7 +26,17 @@ export function DevicePackSignatureInspector({
   const [packPath, setPackPath] = useState("");
   const [signaturePath, setSignaturePath] = useState("");
   const [report, setReport] = useState<DevicePackSignatureReport | null>(null);
+  const [trustedKeys, setTrustedKeys] = useState<TrustedDevicePackKey[]>([]);
   const [error, setError] = useState("");
+
+  useEffect(() => {
+    if (!visible || !isDesktop()) return;
+    api
+      .listTrustedDevicePackKeys()
+      .then(setTrustedKeys)
+      .catch((reason) => setError(String(reason)));
+  }, [visible]);
+
   if (!visible) return null;
   const choose = async (kind: "pack" | "signature") => {
     if (!isDesktop()) return;
@@ -49,6 +62,30 @@ export function DevicePackSignatureInspector({
     try {
       setError("");
       setReport(await api.inspectDevicePackSignature(packPath, signaturePath));
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : String(reason));
+    }
+  };
+  const trustCurrentKey = async () => {
+    try {
+      setError("");
+      setTrustedKeys(
+        await api.trustDevicePackSignatureKey(packPath, signaturePath),
+      );
+      setReport(await api.inspectDevicePackSignature(packPath, signaturePath));
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : String(reason));
+    }
+  };
+  const removeTrustedKey = async (fingerprint: string) => {
+    try {
+      setError("");
+      setTrustedKeys(await api.removeTrustedDevicePackKey(fingerprint));
+      if (packPath && signaturePath) {
+        setReport(
+          await api.inspectDevicePackSignature(packPath, signaturePath),
+        );
+      }
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : String(reason));
     }
@@ -102,22 +139,72 @@ export function DevicePackSignatureInspector({
           {report && (
             <div
               className={
-                report.verified
+                report.trustedIdentity
                   ? "signature-result valid"
-                  : "signature-result invalid"
+                  : report.verified
+                    ? "signature-result verified"
+                    : "signature-result invalid"
               }
             >
-              {report.verified ? <CheckCircle2 /> : <AlertTriangle />}
+              {report.trustedIdentity ? (
+                <CheckCircle2 />
+              ) : report.verified ? (
+                <ShieldQuestion />
+              ) : (
+                <AlertTriangle />
+              )}
               <span>
                 <code>{report.code}</code>
                 <b>{report.signer}</b>
                 <p>{zh ? report.messageZh : report.messageEn}</p>
                 <small>
-                  {report.keyId} · {report.packSha256}
+                  {report.keyId} · {report.publicKeyFingerprint}
                 </small>
+                {report.verified && !report.trustedIdentity && (
+                  <button
+                    className="signature-trust-action"
+                    onClick={() => void trustCurrentKey()}
+                  >
+                    <KeyRound />
+                    {zh ? "信任此发布密钥" : "Trust this publisher key"}
+                  </button>
+                )}
               </span>
             </div>
           )}
+          <section className="trusted-key-list">
+            <div className="trusted-key-list-title">
+              <span>
+                <KeyRound />
+                {zh ? "本地可信密钥" : "Locally trusted keys"}
+              </span>
+              <small>{trustedKeys.length}</small>
+            </div>
+            {trustedKeys.length === 0 ? (
+              <p>
+                {zh
+                  ? "尚未信任任何发布密钥。"
+                  : "No publisher key is trusted yet."}
+              </p>
+            ) : (
+              trustedKeys.map((key) => (
+                <div key={key.fingerprint}>
+                  <span>
+                    <b>{key.signer}</b>
+                    <code>
+                      {key.keyId} · {key.fingerprint.slice(0, 16)}…
+                    </code>
+                  </span>
+                  <button
+                    onClick={() => void removeTrustedKey(key.fingerprint)}
+                    aria-label={zh ? "撤销信任" : "Remove trust"}
+                  >
+                    <Trash2 />
+                  </button>
+                </div>
+              ))
+            )}
+          </section>
         </main>
         <footer>
           <button className="secondary" onClick={onClose}>

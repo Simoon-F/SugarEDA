@@ -4,21 +4,25 @@ import {
   AlertTriangle,
   CheckCircle2,
   Cpu,
+  Activity,
   FileDown,
   FileText,
   LoaderCircle,
   ShieldCheck,
+  Network,
   X,
 } from "lucide-react";
 import { api, isDesktop } from "./bridge";
 import { createDevicePackDraft } from "./device-pack-authoring-draft";
 import { DevicePackAuthoringDevice } from "./device-pack-authoring-device";
 import { DevicePackAuthoringManifest } from "./device-pack-authoring-manifest";
+import { DevicePackAuthoringModels } from "./device-pack-authoring-models";
 import { DevicePackAuthoringReview } from "./device-pack-authoring-review";
+import { DevicePackAuthoringSignalStructure } from "./device-pack-authoring-signal-structure";
 import type { DevicePack, DevicePackAuthoringReport } from "./types";
 import "./device-pack-authoring-editor.css";
 
-type Section = "manifest" | "pins" | "review";
+type Section = "manifest" | "pins" | "signals" | "models" | "review";
 
 export function DevicePackAuthoringEditor({
   open,
@@ -214,11 +218,27 @@ export function DevicePackAuthoringEditor({
             {zh ? "器件与引脚" : "Device & pins"}
           </button>
           <button
+            className={section === "signals" ? "active" : ""}
+            onClick={() => setSection("signals")}
+          >
+            <Network />
+            <span>03</span>
+            {zh ? "单元与差分" : "Units & pairs"}
+          </button>
+          <button
+            className={section === "models" ? "active" : ""}
+            onClick={() => setSection("models")}
+          >
+            <Activity />
+            <span>04</span>
+            {zh ? "模型与资料" : "Models & docs"}
+          </button>
+          <button
             className={section === "review" ? "active" : ""}
             onClick={() => setSection("review")}
           >
             <FileText />
-            <span>03</span>
+            <span>05</span>
             {zh ? "校验与预览" : "Review"}
           </button>
         </nav>
@@ -238,6 +258,20 @@ export function DevicePackAuthoringEditor({
           )}
           {section === "pins" && (
             <DevicePackAuthoringDevice
+              pack={pack}
+              language={language}
+              onChange={changePack}
+            />
+          )}
+          {section === "signals" && (
+            <DevicePackAuthoringSignalStructure
+              pack={pack}
+              language={language}
+              onChange={changePack}
+            />
+          )}
+          {section === "models" && (
+            <DevicePackAuthoringModels
               pack={pack}
               language={language}
               onChange={changePack}

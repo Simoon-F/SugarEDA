@@ -55,8 +55,8 @@ export function DevicePackAuthoringReview({
         <Box />
         <span>
           {zh
-            ? "此工作台生成 L1/L2/L5 数据基础。SPICE 模型、IBIS/S 参数元数据与 SDK Adapter 清单必须通过自包含 JSON 和相应授权流程加入。"
-            : "This workbench authors the L1/L2/L5 foundation. SPICE models, IBIS/S-parameter metadata, and SDK adapter manifests require self-contained JSON and their respective authorization workflow."}
+            ? "此工作台生成 L1/L2/L3 数据及 L4/L5 元数据基础。SPICE 必须自包含；IBIS/S 参数仅代表元数据，SDK Adapter 仍须通过独立授权契约加入。"
+            : "This workbench authors L1/L2/L3 data and the L4/L5 metadata foundation. SPICE must be self-contained; IBIS/S-parameter entries remain metadata, and SDK adapters still require a separate authorized contract."}
         </span>
       </div>
       <pre>{JSON.stringify(pack, null, 2)}</pre>

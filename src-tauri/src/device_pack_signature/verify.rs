@@ -1,4 +1,7 @@
-use super::{DetachedDevicePackSignature, DevicePackSignatureReport};
+use super::{
+    trust_store::fingerprint, DetachedDevicePackSignature, DevicePackSignatureReport,
+    TrustedDevicePackKey,
+};
 use base64::{engine::general_purpose::STANDARD, Engine};
 use ed25519_dalek::{Signature, Verifier, VerifyingKey};
 use std::path::Path;
@@ -10,20 +13,20 @@ const MAX_SIGNATURE_FILE_BYTES: u64 = 64 * 1024;
 pub(super) fn inspect_files(
     pack_path: &Path,
     signature_path: &Path,
+    trusted_keys: &[TrustedDevicePackKey],
 ) -> Result<DevicePackSignatureReport, String> {
     validate_names(pack_path, signature_path)?;
     let pack = crate::device_pack::import(pack_path).map_err(|error| error.to_string())?;
-    let metadata = std::fs::metadata(signature_path).map_err(|error| error.to_string())?;
-    if !metadata.is_file() || metadata.len() > MAX_SIGNATURE_FILE_BYTES {
-        return Err("Detached signature must be a regular file no larger than 64 KiB".into());
-    }
-    let bytes = std::fs::read(signature_path).map_err(|error| error.to_string())?;
-    let envelope: DetachedDevicePackSignature =
-        serde_json::from_slice(&bytes).map_err(|error| error.to_string())?;
-    validate_envelope(&envelope)?;
+    let envelope = read_signature_envelope(signature_path)?;
+    let key_fingerprint = fingerprint(&envelope.public_key_base64)?;
+    let trusted_identity = trusted_keys.iter().any(|key| {
+        key.fingerprint == key_fingerprint && key.public_key_base64 == envelope.public_key_base64
+    });
     if envelope.pack_sha256 != pack.sha256 {
         return Ok(report(
             &envelope,
+            &key_fingerprint,
+            false,
             false,
             "device-pack-signature.hash-mismatch",
             "签名声明的内容哈希与器件包不一致",
@@ -50,19 +53,48 @@ pub(super) fn inspect_files(
     {
         return Ok(report(
             &envelope,
+            &key_fingerprint,
+            false,
             false,
             "device-pack-signature.invalid-signature",
             "Ed25519 签名无效，器件包来源或内容不可验证",
             "The Ed25519 signature is invalid; pack origin or content cannot be verified",
         ));
     }
+    if trusted_identity {
+        return Ok(report(
+            &envelope,
+            &key_fingerprint,
+            true,
+            true,
+            "device-pack-signature.verified-trusted",
+            "签名与内容匹配，且该公钥已由用户加入本地信任库",
+            "The signature matches the content and the user has trusted this key locally",
+        ));
+    }
     Ok(report(
         &envelope,
+        &key_fingerprint,
         true,
+        false,
         "device-pack-signature.verified-untrusted",
         "签名与内容匹配，但公钥尚未加入本地信任库；不能据此声称厂商身份可信",
         "The signature matches the content, but the key is not locally trusted; vendor identity is not established",
     ))
+}
+
+pub(super) fn read_signature_envelope(
+    signature_path: &Path,
+) -> Result<DetachedDevicePackSignature, String> {
+    let metadata = std::fs::symlink_metadata(signature_path).map_err(|error| error.to_string())?;
+    if !metadata.is_file() || metadata.len() > MAX_SIGNATURE_FILE_BYTES {
+        return Err("Detached signature must be a regular file no larger than 64 KiB".into());
+    }
+    let bytes = std::fs::read(signature_path).map_err(|error| error.to_string())?;
+    let envelope: DetachedDevicePackSignature =
+        serde_json::from_slice(&bytes).map_err(|error| error.to_string())?;
+    validate_envelope(&envelope)?;
+    Ok(envelope)
 }
 
 fn validate_names(pack_path: &Path, signature_path: &Path) -> Result<(), String> {
@@ -117,18 +149,21 @@ fn signing_message(pack_sha256: &str) -> String {
 
 fn report(
     envelope: &DetachedDevicePackSignature,
+    public_key_fingerprint: &str,
     verified: bool,
+    trusted_identity: bool,
     code: &str,
     message_zh: &str,
     message_en: &str,
 ) -> DevicePackSignatureReport {
     DevicePackSignatureReport {
         verified,
-        trusted_identity: false,
+        trusted_identity,
         algorithm: envelope.algorithm.clone(),
         key_id: envelope.key_id.clone(),
         signer: envelope.signer.clone(),
         pack_sha256: envelope.pack_sha256.clone(),
+        public_key_fingerprint: public_key_fingerprint.into(),
         code: code.into(),
         message_zh: message_zh.into(),
         message_en: message_en.into(),
@@ -165,19 +200,33 @@ mod tests {
         });
         let signature_path = directory.path().join("fixture.devicepack.sig.json");
         std::fs::write(&signature_path, serde_json::to_vec(&envelope).unwrap()).unwrap();
-        let report = inspect_files(&pack_path, &signature_path).unwrap();
+        let report = inspect_files(&pack_path, &signature_path, &[]).unwrap();
         assert!(report.verified);
         assert!(!report.trusted_identity);
         assert_eq!(report.code, "device-pack-signature.verified-untrusted");
 
+        let trusted_key = TrustedDevicePackKey {
+            key_id: "test-key".into(),
+            signer: "SugarEDA test signer".into(),
+            public_key_base64: STANDARD.encode(signing_key.verifying_key().as_bytes()),
+            fingerprint: report.public_key_fingerprint.clone(),
+            trusted_at: "2026-01-01T00:00:00Z".into(),
+        };
+        let trusted_report = inspect_files(&pack_path, &signature_path, &[trusted_key]).unwrap();
+        assert!(trusted_report.trusted_identity);
+        assert_eq!(
+            trusted_report.code,
+            "device-pack-signature.verified-trusted"
+        );
+
         let mut mismatched = envelope;
         mismatched["packSha256"] = "0".repeat(64).into();
         std::fs::write(&signature_path, serde_json::to_vec(&mismatched).unwrap()).unwrap();
-        let report = inspect_files(&pack_path, &signature_path).unwrap();
+        let report = inspect_files(&pack_path, &signature_path, &[]).unwrap();
         assert!(!report.verified);
         assert_eq!(report.code, "device-pack-signature.hash-mismatch");
 
         std::fs::write(&pack_path, b"tampered").unwrap();
-        assert!(inspect_files(&pack_path, &signature_path).is_err());
+        assert!(inspect_files(&pack_path, &signature_path, &[]).is_err());
     }
 }

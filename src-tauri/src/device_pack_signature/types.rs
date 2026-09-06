@@ -21,7 +21,18 @@ pub(crate) struct DevicePackSignatureReport {
     pub key_id: String,
     pub signer: String,
     pub pack_sha256: String,
+    pub public_key_fingerprint: String,
     pub code: String,
     pub message_zh: String,
     pub message_en: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub(crate) struct TrustedDevicePackKey {
+    pub key_id: String,
+    pub signer: String,
+    pub public_key_base64: String,
+    pub fingerprint: String,
+    pub trusted_at: String,
 }

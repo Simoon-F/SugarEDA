@@ -148,12 +148,22 @@ SDK Adapter 包含 `id`、`sdkType`、`versionRequirement`、安全的相对 `lo
 
 ## 制作器件包
 
+可以从器件包管理器进入可视化制作工作台。它支持 manifest、引脚/电压域、基础 ERC、复用功能、多单元符号、差分对、SPICE 端口绑定、IBIS/S 参数元数据和资料来源；导出前仍由同一个 Rust 导入器执行权威校验。
+
+手工制作时：
+
 1. 从 [`examples/devicepacks`](../examples/devicepacks) 中最接近的自包含测试包开始。
 2. 选择稳定包 ID 和版本，记录真实来源及允许再分发的许可证。
 3. 完整列出物理 pad/pin，再增加电压域、复用功能、差分对和显式规则。
 4. 把大型符号拆成有意义的功能 unit；如果器件具有 SPICE 模型，为每个模型补全 `spiceBindings`。
 5. 只嵌入获准再分发的 SPICE 文本；IBIS/S 参数暂记录为元数据。
 6. 在器件包管理器导入。错误会带 `invalid_pin`、`missing_reference`、`external_model_reference` 等稳定类别。
+
+## 分离签名与本地信任
+
+DevicePack 可以配套 `.devicepack.sig.json` Ed25519 分离签名。签名覆盖 Rust 规范序列化后的内容 SHA-256，而不是原始 JSON 排版。签名有效只证明对应公钥签署了相同内容；只有用户在签名面板明确将该公钥指纹加入本地信任库后，结果才显示为本地可信。
+
+本地信任不是公共 CA 背书，不会下载证书、吊销列表或厂商密钥。SugarEDA 不生成、导入或保存发布者私钥。完整格式与安全边界见 [第九阶段签名格式](p3-phase9-devicepack-authoring-and-adapter-contract.md) 和 [第十阶段本地信任](p3-phase10-advanced-devicepack-authoring-and-trust.md)。
 
 ## 为什么 SDK 不等于 SPICE
 

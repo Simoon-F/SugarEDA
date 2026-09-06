@@ -42,7 +42,7 @@ SugarEDA DevicePack Signature v1
 <packSha256>
 ```
 
-验证器限制签名文件为 64 KiB，严格拒绝未知字段、错误算法、错误长度和哈希不匹配。状态 `device-pack-signature.verified-untrusted` 的含义仅是“该公钥签署了相同内容”。当前没有本地可信根或证书链，因此 `trustedIdentity` 始终为 `false`，UI 不会把自声明 signer 当成可信厂商。
+验证器限制签名文件为 64 KiB，严格拒绝未知字段、错误算法、错误长度和哈希不匹配。状态 `device-pack-signature.verified-untrusted` 的含义仅是“该公钥签署了相同内容”。第九阶段没有本地可信根或证书链，因此当时 `trustedIdentity` 始终为 `false`。第十阶段加入了用户显式管理的本地公钥信任库，但仍不会把未经用户确认的自声明 signer 当成可信厂商，详见第十阶段文档。
 
 本阶段不生成或保存私钥。发布者必须在自己的受控签名环境中产生分离签名。
 
