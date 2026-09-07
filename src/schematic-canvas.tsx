@@ -9,6 +9,7 @@ import type {
 } from "./types";
 import { useI18n } from "./i18n";
 import { activeSchematicSheet } from "./schematic-sheet";
+import { isNetworkLabel } from "./hierarchy";
 import {
   analyzeSchematic,
   GRID,
@@ -45,6 +46,7 @@ type Props = {
     screen: Point;
   } | null;
   onExternalDropComplete: () => void;
+  onNavigateSheet: (sheetId: string) => void;
   focusRequest: { componentId: string; nonce: number } | null;
 };
 export const SchematicCanvas = memo(function SchematicCanvas({
@@ -59,6 +61,7 @@ export const SchematicCanvas = memo(function SchematicCanvas({
   onPlacementComplete,
   externalDrop,
   onExternalDropComplete,
+  onNavigateSheet,
   focusRequest,
 }: Props) {
   const { t } = useI18n();
@@ -171,7 +174,11 @@ export const SchematicCanvas = memo(function SchematicCanvas({
   );
   const componentSnap = useCallback(
     (kind: ComponentPlacement["kind"], world: Point, ignoredId?: string) =>
-      kind === "netLabel" ? electricalSnap(world, ignoredId) : snapPoint(world),
+      kind === "netLabel" ||
+      kind === "globalLabel" ||
+      kind === "hierarchicalPort"
+        ? electricalSnap(world, ignoredId)
+        : snapPoint(world),
     [electricalSnap],
   );
   const eventPoint = (event: React.PointerEvent): Point => {
@@ -185,24 +192,30 @@ export const SchematicCanvas = memo(function SchematicCanvas({
     (selection: ComponentPlacement, world: Point) => {
       const position = componentSnap(selection.kind, world);
       onCommand(
-        selection.device
+        selection.sheetTargetId
           ? {
-              action: "addDeviceComponent",
-              packSha256: selection.device.packSha256,
-              deviceId: selection.device.deviceId,
-              variantId: selection.device.variantId ?? null,
-              unitId: selection.device.unitId ?? null,
-              logicalInstanceId: selection.device.logicalInstanceId ?? null,
+              action: "addSheetInstance",
+              targetSheetId: selection.sheetTargetId,
               position,
             }
-          : selection.model
+          : selection.device
             ? {
-                action: "addModelComponent",
-                libraryId: selection.model.libraryId,
-                modelName: selection.model.modelName,
+                action: "addDeviceComponent",
+                packSha256: selection.device.packSha256,
+                deviceId: selection.device.deviceId,
+                variantId: selection.device.variantId ?? null,
+                unitId: selection.device.unitId ?? null,
+                logicalInstanceId: selection.device.logicalInstanceId ?? null,
                 position,
               }
-            : { action: "addComponent", kind: selection.kind, position },
+            : selection.model
+              ? {
+                  action: "addModelComponent",
+                  libraryId: selection.model.libraryId,
+                  modelName: selection.model.modelName,
+                  position,
+                }
+              : { action: "addComponent", kind: selection.kind, position },
       );
     },
     [componentSnap, onCommand],
@@ -538,7 +551,7 @@ export const SchematicCanvas = memo(function SchematicCanvas({
       );
       if (!pointVisible(displayedPosition, componentMargin)) continue;
       const disconnectedLabel =
-        component.kind === "netLabel" &&
+        isNetworkLabel(component.kind) &&
         (drag?.id === component.id
           ? nearestElectricalPoint(
               project,
@@ -1134,6 +1147,14 @@ export const SchematicCanvas = memo(function SchematicCanvas({
       x: e.clientX - (rect?.left ?? 0),
       y: e.clientY - (rect?.top ?? 0),
     };
+    const component = hitComponent(screen);
+    if (
+      component?.kind === "sheetInstance" &&
+      component.parameters.targetSheetId
+    ) {
+      onNavigateSheet(component.parameters.targetSheetId);
+      return;
+    }
     const wire = hitWire(screen);
     if (!wire) return;
     const insertion = insertWireBend(
@@ -1312,7 +1333,11 @@ function drawComponent(
     ctx.lineTo(20, -30);
     ctx.moveTo(-4, 11);
     ctx.lineTo(20, 30);
-  } else if (c.kind === "subcircuit" || c.kind === "device") {
+  } else if (
+    c.kind === "subcircuit" ||
+    c.kind === "device" ||
+    c.kind === "sheetInstance"
+  ) {
     const ys = c.pins.map((pin) => pin.offset.y);
     const halfWidth = (c.symbolWidth ?? 64) / 2;
     const top = c.symbolHeight
@@ -1322,7 +1347,7 @@ function drawComponent(
       ? c.symbolHeight / 2
       : Math.max(24, ...ys) + 10;
     ctx.rect(-halfWidth, top, halfWidth * 2, bottom - top);
-    if (c.kind === "device") {
+    if (c.kind === "device" || c.kind === "sheetInstance") {
       ctx.fillStyle = "#f8fbff";
       ctx.fillRect(
         -halfWidth + 1,
@@ -1330,16 +1355,24 @@ function drawComponent(
         halfWidth * 2 - 2,
         bottom - top - 2,
       );
-      ctx.fillStyle = "#2869df";
+      ctx.fillStyle = c.kind === "sheetInstance" ? "#46616f" : "#2869df";
       ctx.fillRect(-halfWidth + 1, top + 1, halfWidth * 2 - 2, 22);
       ctx.fillStyle = "#ffffff";
       ctx.font = "700 10px SFMono-Regular, monospace";
       ctx.textAlign = "center";
       ctx.fillText(
-        (c.device?.symbolUnitId || "DEVICE").toUpperCase(),
+        (c.kind === "sheetInstance"
+          ? "HIERARCHY"
+          : c.device?.symbolUnitId || "DEVICE"
+        ).toUpperCase(),
         0,
         top + 15,
       );
+      if (c.kind === "sheetInstance") {
+        ctx.fillStyle = "#34434d";
+        ctx.font = "600 12px SFMono-Regular, monospace";
+        ctx.fillText(c.displayName, 0, top + 43);
+      }
       ctx.textAlign = "left";
     }
     for (const pin of c.pins) {
@@ -1376,17 +1409,31 @@ function drawComponent(
     ctx.lineTo(11, 6);
     ctx.moveTo(-5, 12);
     ctx.lineTo(5, 12);
-  } else if (c.kind === "netLabel") {
+  } else if (c.kind === "netLabel" || c.kind === "globalLabel") {
     ctx.moveTo(0, 0);
-    ctx.lineTo(8, 0);
-    ctx.lineTo(14, -8);
+    ctx.lineTo(c.kind === "globalLabel" ? 10 : 8, 0);
+    ctx.lineTo(c.kind === "globalLabel" ? 18 : 14, -8);
     ctx.lineTo(48, -8);
     ctx.lineTo(48, 8);
-    ctx.lineTo(14, 8);
+    ctx.lineTo(c.kind === "globalLabel" ? 18 : 14, 8);
+    ctx.closePath();
+    if (c.kind === "globalLabel") {
+      ctx.moveTo(10, 0);
+      ctx.lineTo(18, -8);
+      ctx.lineTo(26, 0);
+      ctx.lineTo(18, 8);
+    }
+  } else if (c.kind === "hierarchicalPort") {
+    ctx.moveTo(0, 0);
+    ctx.lineTo(12, -9);
+    ctx.lineTo(48, -9);
+    ctx.lineTo(56, 0);
+    ctx.lineTo(48, 9);
+    ctx.lineTo(12, 9);
     ctx.closePath();
   }
   ctx.stroke();
-  if (c.model || c.device) {
+  if (c.model || c.device || c.kind === "sheetInstance") {
     ctx.font = "11px SFMono-Regular, monospace";
     ctx.fillStyle = "#6b7280";
     for (const pin of c.pins) {
@@ -1415,16 +1462,24 @@ function drawComponent(
     }
   }
   ctx.restore();
-  ctx.fillStyle = invalid ? "#c83f49" : selected ? "#1f57bd" : "#20242b";
-  ctx.font = "600 13px SFMono-Regular, monospace";
-  ctx.fillText(
-    c.kind === "netLabel" ? c.parameters.value : c.spiceRef,
-    center.x + 10,
-    center.y - 22,
-  );
+  if (c.kind !== "sheetInstance") {
+    ctx.fillStyle = invalid ? "#c83f49" : selected ? "#1f57bd" : "#20242b";
+    ctx.font = "600 13px SFMono-Regular, monospace";
+    ctx.fillText(
+      isNetworkLabel(c.kind) || c.kind === "hierarchicalPort"
+        ? c.parameters.value
+        : c.spiceRef,
+      center.x + 10,
+      center.y - 22,
+    );
+  }
   ctx.fillStyle = "#6b7280";
   ctx.font = "12px SFMono-Regular, monospace";
-  if (c.kind !== "netLabel")
+  if (
+    !isNetworkLabel(c.kind) &&
+    c.kind !== "hierarchicalPort" &&
+    c.kind !== "sheetInstance"
+  )
     ctx.fillText(
       c.model?.modelName || c.device?.deviceId || c.parameters.value || "",
       center.x + 10,

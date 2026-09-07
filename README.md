@@ -27,10 +27,12 @@
 器件包制作、签名格式和无执行 Adapter 契约见 [P3 第九阶段文档](docs/p3-phase9-devicepack-authoring-and-adapter-contract.md)。
 高级制作与本地发布者信任模型见 [P3 第十阶段文档](docs/p3-phase10-advanced-devicepack-authoring-and-trust.md)。
 多页原理图的模块边界与电气作用域见 [P3 第十二阶段文档](docs/p3-phase12-multi-sheet-schematic.md)。
+全局网络与层次图纸语义见 [P3 第十三阶段文档](docs/p3-phase13-cross-sheet-hierarchy.md)。
 
 ### 原理图编辑
 
 - 工程支持多张原理图页签，新建、切换、重命名和删除均由 Rust 工作区命令管理并随工程保存。
+- 全局标签可显式连接跨页网络；层次端口会同步为父图纸实例引脚，并提供跨页连接导航。
 - 电阻、电容、电感、电压源、电流源、接地与网络标签。
 - 网格吸附、缩放、平移、框选、旋转、删除和正交布线。
 - 导线交点与 T 型连接节点、拐点增删、端点重接和线段整形。
@@ -162,6 +164,7 @@ src/                         React 工作台、Canvas 原理图和波形界面
 src-tauri/src/application.rs Rust 编辑命令、Undo/Redo 与工作区状态
 src-tauri/src/project.rs     项目校验和原子保存
 src-tauri/src/schematic_sheet.rs 图纸生命周期、选择和持久化约束
+src-tauri/src/hierarchy.rs  跨页网络、端口同步、循环检查和层次网表展开
 src-tauri/src/board_config/  板级配置来源、验证、持久化和项目级检查
 src-tauri/src/device_pack_authoring/ 器件包草稿校验和原子导出
 src-tauri/src/device_pack_signature/ Ed25519 分离签名验证
@@ -178,7 +181,7 @@ scripts/desktop-smoke.mjs    真实桌面 WebDriver 冒烟测试
 
 ## 当前边界
 
-- 工程可包含多张独立原理图；ERC 覆盖全部图纸，网表与 SPICE 仿真明确作用于当前图纸。跨页全局网络端口和层次化图纸尚未实现。
+- 工程支持显式全局网络和单实例层次图纸；ERC 覆盖展开后的全工程拓扑，SPICE 从当前图纸展开可达的全局网络与子图。可复用多实例层次模块、总线和参数化图纸尚未实现。
 - L5 提供 Rust 权威实时校验、可视化 PinMux/启动/电压配置和确定性 JSON/独立 DTS 子集导出；不解析通用 DTS、厂商 SDK 或 Device Tree include。
 - Adapter Contract v1 仅验证清单和数据 DTO，明确不执行进程、动态库或脚本；签名有效也不等于发布者身份受信任。
 - 本地发布者信任是用户对具体 Ed25519 公钥指纹的显式认可，不是公共证书背书；当前不联网检查吊销状态。

@@ -11,6 +11,7 @@ mod device_tree_adapter;
 mod domain;
 mod erc;
 mod export;
+mod hierarchy;
 mod models;
 mod netlist;
 mod project;

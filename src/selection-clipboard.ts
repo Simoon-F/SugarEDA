@@ -34,7 +34,12 @@ export function clipboardFromSelection(
 ): ClipboardPayload {
   const sheet = activeSchematicSheet(project);
   const components = sheet.components
-    .filter((component) => selected.has(component.id))
+    // A child sheet has single-instance ownership in phase 13. Copying its block
+    // would create an ambiguous second owner, so keep it out of clipboard data.
+    .filter(
+      (component) =>
+        selected.has(component.id) && component.kind !== "sheetInstance",
+    )
     .map((component) => structuredClone(component));
   const logicalIds = new Set(
     components.flatMap((component) =>

@@ -247,15 +247,23 @@ pub fn generate(project: &Project) -> Result<String, Vec<NetlistError>> {
             component_id: None,
         }]
     })?;
-    let sheet = crate::schematic_sheet::active(project).map_err(|message| {
+    let active_sheet = crate::schematic_sheet::active(project).map_err(|message| {
         vec![NetlistError {
             code: "no_sheet",
             message,
             component_id: None,
         }]
     })?;
-    let mut errors = validate_components(project, sheet);
-    let resolved_devices = match crate::simulation_binding::resolve(project, sheet) {
+    let sheet =
+        crate::hierarchy::flatten_for_analysis(project, active_sheet.id).map_err(|message| {
+            vec![NetlistError {
+                code: "invalid_hierarchy",
+                message,
+                component_id: None,
+            }]
+        })?;
+    let mut errors = validate_components(project, &sheet);
+    let resolved_devices = match crate::simulation_binding::resolve(project, &sheet) {
         Ok(devices) => devices,
         Err(binding_issues) => {
             errors.extend(binding_issues.into_iter().map(|issue| NetlistError {
@@ -432,6 +440,24 @@ pub fn generate(project: &Project) -> Result<String, Vec<NetlistError>> {
         }
     }
 
+    let mut roots_by_name = BTreeMap::new();
+    for (root, name) in &labels {
+        let normalized = name.to_ascii_lowercase();
+        if let Some(previous) = roots_by_name.insert(normalized, *root) {
+            uf.union(previous, *root);
+        }
+    }
+    let mut merged_labels = BTreeMap::new();
+    for (root, name) in labels {
+        merged_labels.entry(uf.find(root)).or_insert(name);
+    }
+    let labels = merged_labels;
+    ground_roots = pins
+        .iter()
+        .filter(|(_, _, _, ground)| *ground)
+        .map(|(_, _, point, _)| uf.find(*point))
+        .collect();
+
     let mut pin_counts: BTreeMap<Key, usize> = BTreeMap::new();
     for (_, _, p, _) in &pins {
         *pin_counts.entry(uf.find(*p)).or_default() += 1;
@@ -531,8 +557,14 @@ pub fn generate(project: &Project) -> Result<String, Vec<NetlistError>> {
         .components
         .iter()
         .filter(|c| {
-            !matches!(c.kind, ComponentKind::Ground | ComponentKind::NetLabel)
-                && c.kind != ComponentKind::Device
+            !matches!(
+                c.kind,
+                ComponentKind::Ground
+                    | ComponentKind::NetLabel
+                    | ComponentKind::GlobalLabel
+                    | ComponentKind::HierarchicalPort
+                    | ComponentKind::SheetInstance
+            ) && c.kind != ComponentKind::Device
         })
         .collect();
     devices.sort_by(|a, b| a.spice_ref.cmp(&b.spice_ref));
@@ -670,7 +702,11 @@ fn validate_components(project: &Project, sheet: &SchematicSheet) -> Vec<Netlist
     for component in &sheet.components {
         if matches!(
             component.kind,
-            ComponentKind::Ground | ComponentKind::NetLabel
+            ComponentKind::Ground
+                | ComponentKind::NetLabel
+                | ComponentKind::GlobalLabel
+                | ComponentKind::HierarchicalPort
+                | ComponentKind::SheetInstance
         ) {
             continue;
         }
@@ -998,6 +1034,51 @@ mod tests {
         crate::schematic_sheet::select(&mut project, first).unwrap();
         assert!(generate(&project).is_ok());
         assert_ne!(first, empty);
+    }
+
+    #[test]
+    fn global_labels_connect_explicitly_across_sheets() {
+        let mut project = Project::blank("global labels");
+        project.simulation_profiles[0].signals = vec!["v(shared)".into()];
+        let root = project.sheets[0].id;
+        let source = crate::domain::component(ComponentKind::VoltageSource, 0.0, 0.0, "V1", "DC 5");
+        let ground_a = crate::domain::component(ComponentKind::Ground, 0.0, 50.0, "", "");
+        let global_a =
+            crate::domain::component(ComponentKind::GlobalLabel, 20.0, -30.0, "", "shared");
+        project.sheets[0]
+            .components
+            .extend([source, ground_a, global_a]);
+        project.sheets[0].wires.push(crate::domain::Wire {
+            id: Uuid::new_v4(),
+            points: vec![Point { x: 0.0, y: -30.0 }, Point { x: 20.0, y: -30.0 }],
+        });
+        let child = crate::schematic_sheet::add(&mut project, "Load".into()).unwrap();
+        let resistor = crate::domain::component(ComponentKind::Resistor, 100.0, 0.0, "R1", "1k");
+        let ground_b = crate::domain::component(ComponentKind::Ground, 160.0, 20.0, "", "");
+        let global_b =
+            crate::domain::component(ComponentKind::GlobalLabel, 40.0, 0.0, "", "shared");
+        crate::schematic_sheet::active_mut(&mut project)
+            .unwrap()
+            .components
+            .extend([resistor, ground_b, global_b]);
+        crate::schematic_sheet::active_mut(&mut project)
+            .unwrap()
+            .wires
+            .extend([
+                crate::domain::Wire {
+                    id: Uuid::new_v4(),
+                    points: vec![Point { x: 60.0, y: 0.0 }, Point { x: 40.0, y: 0.0 }],
+                },
+                crate::domain::Wire {
+                    id: Uuid::new_v4(),
+                    points: vec![Point { x: 140.0, y: 0.0 }, Point { x: 160.0, y: 0.0 }],
+                },
+            ]);
+        crate::schematic_sheet::select(&mut project, root).unwrap();
+        let netlist = generate(&project).unwrap();
+        assert!(netlist.contains("V1 shared 0 DC 5"));
+        assert!(netlist.contains("R1 shared 0 1k"));
+        assert_ne!(root, child);
     }
     #[test]
     fn open_circuit_is_rejected() {

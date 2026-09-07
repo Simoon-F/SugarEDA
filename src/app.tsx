@@ -20,8 +20,16 @@ import { DevicePackManager } from "./device-pack-manager";
 import { ErcPanel } from "./erc-panel";
 import { BoardConfigurationPanel } from "./board-configuration-panel";
 import { BoardConfigurationEditor } from "./board-configuration-editor";
+import { HierarchyNavigator } from "./hierarchy-navigator";
 import { locateProjectBoardConfigurationIssue } from "./device-config-location";
 import { placeLocalDeviceUnit } from "./device-unit-factory";
+import {
+  createLocalConnector,
+  createLocalSheetInstance,
+  isNetworkLabel,
+  synchronizeLocalSheetInstances,
+  type ConnectorDirection,
+} from "./hierarchy";
 import { removeOrphanDeviceInstances } from "./device-instance";
 import { buildVisibleLibrary, type LibraryGroup } from "./component-library";
 import {
@@ -115,7 +123,7 @@ function moveLocalSelection(
   const attachedPins = components
     .filter(
       (component) =>
-        componentIdSet.has(component.id) && component.kind !== "netLabel",
+        componentIdSet.has(component.id) && !isNetworkLabel(component.kind),
     )
     .flatMap((component) =>
       component.pins.map((pin) => pinPosition(component, pin.offset)),
@@ -176,6 +184,18 @@ const library: LibraryGroup[] = [
     items: [
       { kind: "ground", name: "Ground", shortcut: "G", glyph: "⏚" },
       { kind: "netLabel", name: "Net label", shortcut: "N", glyph: "⌁" },
+      {
+        kind: "globalLabel",
+        name: "Global label",
+        shortcut: "L",
+        glyph: "◆",
+      },
+      {
+        kind: "hierarchicalPort",
+        name: "Hierarchical port",
+        shortcut: "P",
+        glyph: "▷",
+      },
     ],
   },
 ];
@@ -453,6 +473,24 @@ function App() {
           next.project.sheets.some((candidate) => candidate.id === command.id)
         )
           next.project.uiViewState.activeSheetId = command.id;
+      } else if (command.action === "addSheetInstance") {
+        if (
+          !createLocalSheetInstance(
+            next.project,
+            command.targetSheetId,
+            command.position,
+          )
+        )
+          return current;
+      } else if (command.action === "updateConnector") {
+        const connector = next.project.sheets
+          .flatMap((candidate) => candidate.components)
+          .find((candidate) => candidate.id === command.id);
+        if (!connector) return current;
+        connector.parameters.value = command.name;
+        connector.displayName = command.name;
+        if (connector.kind === "hierarchicalPort")
+          connector.parameters.direction = command.direction ?? "bidirectional";
       } else if (command.action === "moveComponent") {
         const c = activeSheet.components.find((c) => c.id === command.id);
         if (c) {
@@ -520,6 +558,12 @@ function App() {
         );
         removeOrphanDeviceInstances(next.project);
       } else if (command.action === "insertSelection") {
+        if (
+          command.components.some(
+            (component) => component.kind === "sheetInstance",
+          )
+        )
+          return current;
         next.project.deviceInstances.push(...command.deviceInstances);
         next.project.boardConfigurations.push(...command.boardConfigurations);
         activeSheet.components.push(...command.components);
@@ -643,6 +687,18 @@ function App() {
         const pin = component?.pins.find((item) => item.id === command.pinId);
         if (pin) pin.noConnect = command.noConnect;
       } else if (command.action === "addComponent") {
+        if (
+          command.kind === "netLabel" ||
+          command.kind === "globalLabel" ||
+          command.kind === "hierarchicalPort"
+        ) {
+          activeSheet.components.push(
+            createLocalConnector(command.kind, command.position),
+          );
+          synchronizeLocalSheetInstances(next.project);
+          next.dirty = true;
+          return next;
+        }
         const defaults: Partial<Record<ComponentKind, [string, string]>> = {
           resistor: ["R", "1k"],
           capacitor: ["C", "1u"],
@@ -650,7 +706,6 @@ function App() {
           voltageSource: ["V", "DC 5"],
           currentSource: ["I", "DC 1m"],
           ground: ["", ""],
-          netLabel: ["", "net"],
         };
         const defaultsForKind = defaults[command.kind];
         if (!defaultsForKind) return current;
@@ -659,19 +714,17 @@ function App() {
             command.kind === "voltageSource" ||
             command.kind === "currentSource";
         const pins =
-          command.kind === "netLabel"
-            ? [{ id: "1", name: "NET", offset: { x: 0, y: 0 } }]
-            : command.kind === "ground"
-              ? [{ id: "1", name: "GND", offset: { x: 0, y: -20 } }]
-              : vertical
-                ? [
-                    { id: "1", name: "+", offset: { x: 0, y: -30 } },
-                    { id: "2", name: "-", offset: { x: 0, y: 30 } },
-                  ]
-                : [
-                    { id: "1", name: "1", offset: { x: -40, y: 0 } },
-                    { id: "2", name: "2", offset: { x: 40, y: 0 } },
-                  ];
+          command.kind === "ground"
+            ? [{ id: "1", name: "GND", offset: { x: 0, y: -20 } }]
+            : vertical
+              ? [
+                  { id: "1", name: "+", offset: { x: 0, y: -30 } },
+                  { id: "2", name: "-", offset: { x: 0, y: 30 } },
+                ]
+              : [
+                  { id: "1", name: "1", offset: { x: -40, y: 0 } },
+                  { id: "2", name: "2", offset: { x: 40, y: 0 } },
+                ];
         let n = 1;
         while (
           prefix &&
@@ -691,15 +744,12 @@ function App() {
           rotation: 0,
           parameters: { value },
           pins,
-          displayName: prefix
-            ? `${prefix}${n}`
-            : command.kind === "netLabel"
-              ? "Net label"
-              : "Ground",
+          displayName: prefix ? `${prefix}${n}` : "Ground",
           spiceRef: prefix ? `${prefix}${n}` : "",
           model: null,
         });
       }
+      synchronizeLocalSheetInstances(next.project);
       next.dirty = true;
       return next;
     });
@@ -1554,7 +1604,8 @@ function App() {
                           ? item.device?.deviceId
                           : undefined) &&
                       placement?.device?.unitId ===
-                        ("device" in item ? item.device?.unitId : undefined)
+                        ("device" in item ? item.device?.unitId : undefined) &&
+                      placement?.sheetTargetId === item.sheetTargetId
                         ? "placing"
                         : ""
                     }`}
@@ -1577,6 +1628,7 @@ function App() {
                         kind: item.kind,
                         model: item.model,
                         device: "device" in item ? item.device : undefined,
+                        sheetTargetId: item.sheetTargetId,
                       };
                       libraryPointer.current = {
                         placement: next,
@@ -1653,10 +1705,11 @@ function App() {
                           kind: item.kind,
                           model: item.model,
                           device: "device" in item ? item.device : undefined,
+                          sheetTargetId: item.sheetTargetId,
                         });
                       }
                     }}
-                    key={`${item.kind}-${item.model?.libraryId || ("device" in item ? item.device?.packSha256 : "") || "builtin"}-${item.name}`}
+                    key={`${item.kind}-${item.model?.libraryId || ("device" in item ? item.device?.packSha256 : "") || item.sheetTargetId || "builtin"}-${item.name}`}
                   >
                     <div className="symbol-mini">{item.glyph}</div>
                     <span>{t(item.name)}</span>
@@ -1767,7 +1820,8 @@ function App() {
                                       placement.device?.deviceId &&
                                     item.device?.unitId ===
                                       placement.device?.unitId
-                                  : !placement.device),
+                                  : !placement.device) &&
+                                item.sheetTargetId === placement.sheetTargetId,
                             )?.name || placement.kind,
                         )} · 点击画布，Esc 取消`
                       : "PLACE · Click canvas, Esc to cancel"
@@ -1789,13 +1843,21 @@ function App() {
             onPlacementComplete={completePlacement}
             externalDrop={externalDrop}
             onExternalDropComplete={completeExternalDrop}
+            onNavigateSheet={(sheetId) => {
+              setSelected([]);
+              void command({ action: "selectSheet", id: sheetId });
+            }}
             focusRequest={focusRequest}
           />
         </section>
         <aside className="inspector panel">
           <div className="panel-heading">
             <span>{t("INSPECTOR")}</span>
-            <small>{selectedComponent?.spiceRef || t("NO SELECTION")}</small>
+            <small>
+              {selectedComponent?.spiceRef ||
+                selectedComponent?.displayName ||
+                t("NO SELECTION")}
+            </small>
           </div>
           {selectedComponent ? (
             <ComponentInspector
@@ -1808,6 +1870,14 @@ function App() {
                   displayName: name,
                   spiceRef: ref,
                   value,
+                })
+              }
+              onUpdateConnector={(name, direction) =>
+                void command({
+                  action: "updateConnector",
+                  id: selectedComponent.id,
+                  name,
+                  direction,
                 })
               }
               onRotate={() =>
@@ -1863,6 +1933,7 @@ function App() {
             <TabsList className="tabs-list">
               {[
                 "ERC",
+                "Hierarchy",
                 "Board Config",
                 "Check",
                 "Configure",
@@ -1918,6 +1989,13 @@ function App() {
                 report={ercReport}
                 checking={ercChecking}
                 onCheck={() => void checkErc()}
+                onLocate={locateCheckIssue}
+              />
+            )}{" "}
+            {bottomTab === "Hierarchy" && (
+              <HierarchyNavigator
+                project={snapshot.project}
+                language={language}
                 onLocate={locateCheckIssue}
               />
             )}{" "}
@@ -2211,31 +2289,76 @@ function Menu({
 function ComponentInspector({
   component,
   onUpdate,
+  onUpdateConnector,
   onRotate,
   onSetPinNoConnect,
 }: {
   component: Component;
   onUpdate: (name: string, ref: string, value: string) => void;
+  onUpdateConnector: (
+    name: string,
+    direction: ConnectorDirection | null,
+  ) => void;
   onRotate: () => void;
   onSetPinNoConnect: (pinId: string, noConnect: boolean) => void;
 }) {
   const { language } = useI18n();
   const [name, setName] = useState(component.displayName),
     [ref, setRef] = useState(component.spiceRef),
-    [value, setValue] = useState(component.parameters.value || "");
+    [value, setValue] = useState(component.parameters.value || ""),
+    [direction, setDirection] = useState<ConnectorDirection>(
+      (component.parameters.direction as ConnectorDirection) || "bidirectional",
+    );
   useEffect(() => {
     setName(component.displayName);
     setRef(component.spiceRef);
     setValue(component.parameters.value || "");
-  }, [component.displayName, component.parameters.value, component.spiceRef]);
+    setDirection(
+      (component.parameters.direction as ConnectorDirection) || "bidirectional",
+    );
+  }, [
+    component.displayName,
+    component.parameters.direction,
+    component.parameters.value,
+    component.spiceRef,
+  ]);
+  const connector =
+    isNetworkLabel(component.kind) || component.kind === "hierarchicalPort";
+  const connectorValid = /^[A-Za-z_][A-Za-z0-9_]{0,127}$/.test(value);
   const valid = !/[;\n\r]/.test(value) && value.length <= 128;
   const changed =
     name !== component.displayName ||
     ref !== component.spiceRef ||
-    value !== (component.parameters.value || "");
+    value !== (component.parameters.value || "") ||
+    (component.kind === "hierarchicalPort" &&
+      direction !== component.parameters.direction);
   const save = () => {
-    if (valid && changed) onUpdate(name, ref, value);
+    if (!changed) return;
+    if (connector && connectorValid)
+      onUpdateConnector(
+        value,
+        component.kind === "hierarchicalPort" ? direction : null,
+      );
+    else if (!connector && valid) onUpdate(name, ref, value);
   };
+  if (component.kind === "sheetInstance")
+    return (
+      <div className="property-form">
+        <div className="selection-banner">
+          <span>{language === "zh-CN" ? "层次图块" : "SHEET INSTANCE"}</span>
+          <b>{component.displayName}</b>
+        </div>
+        <label>
+          {language === "zh-CN" ? "目标图纸" : "TARGET SHEET"}
+          <input value={component.parameters.value || ""} readOnly />
+        </label>
+        <div className="device-inspector-note">
+          {language === "zh-CN"
+            ? `端口由目标图纸同步，共 ${component.pins.length} 个。双击图块可打开目标图纸。`
+            : `${component.pins.length} ports are synchronized from the target sheet. Double-click the block to open it.`}
+        </div>
+      </div>
+    );
   return (
     <form
       className="property-form"
@@ -2247,18 +2370,20 @@ function ComponentInspector({
       <div className="selection-banner">
         <span>{component.kind.replace(/([A-Z])/g, " $1")}</span>
         <b>
-          {component.kind === "netLabel"
+          {connector
             ? component.parameters.value || "NET"
             : component.spiceRef || "GND"}
         </b>
       </div>
-      <label>
-        {language === "zh-CN" ? "显示名称" : "DISPLAY NAME"}
-        <input value={name} onChange={(e) => setName(e.target.value)} />
-      </label>
+      {!connector && (
+        <label>
+          {language === "zh-CN" ? "显示名称" : "DISPLAY NAME"}
+          <input value={name} onChange={(e) => setName(e.target.value)} />
+        </label>
+      )}
       {component.kind !== "ground" && (
         <>
-          {component.kind !== "netLabel" && (
+          {!connector && (
             <label>
               {language === "zh-CN" ? "位号" : "REFERENCE"}
               <input
@@ -2279,7 +2404,7 @@ function ComponentInspector({
             </label>
           ) : component.kind !== "device" ? (
             <label>
-              {component.kind === "netLabel"
+              {connector
                 ? language === "zh-CN"
                   ? "网络名称"
                   : "NET NAME"
@@ -2287,15 +2412,38 @@ function ComponentInspector({
                   ? "SPICE 参数值"
                   : "SPICE VALUE"}
               <input
-                className={!valid ? "invalid" : ""}
+                className={
+                  !(connector ? connectorValid : valid) ? "invalid" : ""
+                }
                 value={value}
                 onChange={(e) => setValue(e.target.value)}
               />
-              {!valid && (
+              {component.kind === "hierarchicalPort" && (
+                <select
+                  value={direction}
+                  onChange={(event) =>
+                    setDirection(event.target.value as ConnectorDirection)
+                  }
+                >
+                  <option value="input">
+                    {language === "zh-CN" ? "输入" : "Input"}
+                  </option>
+                  <option value="output">
+                    {language === "zh-CN" ? "输出" : "Output"}
+                  </option>
+                  <option value="bidirectional">
+                    {language === "zh-CN" ? "双向" : "Bidirectional"}
+                  </option>
+                  <option value="passive">
+                    {language === "zh-CN" ? "无源" : "Passive"}
+                  </option>
+                </select>
+              )}
+              {!(connector ? connectorValid : valid) && (
                 <small className="field-error">
                   {language === "zh-CN"
-                    ? "不能包含控制字符或分号。"
-                    : "Control characters and semicolons are not allowed."}
+                    ? "名称必须以字母或下划线开头，只能包含字母、数字和下划线。"
+                    : "Names must start with a letter or underscore and contain only letters, numbers, and underscores."}
                 </small>
               )}
             </label>
@@ -2311,7 +2459,7 @@ function ComponentInspector({
       <button
         className="property-save"
         type="submit"
-        disabled={!valid || !changed}
+        disabled={!(connector ? connectorValid : valid) || !changed}
       >
         <Save aria-hidden="true" />
         <span>{language === "zh-CN" ? "保存参数" : "Save properties"}</span>

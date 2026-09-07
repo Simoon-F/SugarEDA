@@ -27,6 +27,13 @@ export function availableProbeOptions(project: Project): ProbeOption[] {
       const name = component.parameters.value?.trim();
       if (name && identifier(name)) names.add(name);
     }
+  for (const component of project.sheets.flatMap(
+    (candidate) => candidate.components,
+  ))
+    if (component.kind === "globalLabel") {
+      const name = component.parameters.value?.trim();
+      if (name && identifier(name)) names.add(name);
+    }
   const voltage = [...names]
     .sort((first, second) => first.localeCompare(second))
     .map((name) => ({

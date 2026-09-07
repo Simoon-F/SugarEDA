@@ -1,5 +1,6 @@
 import type { Component, Point, Project, Wire } from "./types";
 import { activeSchematicSheet } from "./schematic-sheet";
+import { isNetworkLabel } from "./hierarchy";
 
 export const GRID = 20;
 const SPATIAL_BUCKET_SIZE = 400;
@@ -249,7 +250,7 @@ export function moveWireWithComponent(
   component: Component,
   position: Point,
 ): Point[] {
-  if (component.kind === "netLabel" || points.length < 2) return points;
+  if (isNetworkLabel(component.kind) || points.length < 2) return points;
   const pins = component.pins.map((pin) => pinPosition(component, pin.offset));
   const delta = {
     x: position.x - component.position.x,
@@ -560,8 +561,9 @@ export function analyzeSchematic(project: Project): SchematicDiagnostics {
   const allPoints = new Map<string, Point>();
   const pins: { id: string; point: Point }[] = [];
   for (const component of sheet.components) {
-    if (component.kind === "netLabel") continue;
+    if (isNetworkLabel(component.kind)) continue;
     for (const pin of component.pins) {
+      if (pin.allowFloating) continue;
       const point = pinPosition(component, pin.offset);
       pins.push({ id: `${component.id}:${pin.id}`, point });
       allPoints.set(pointKey(point), point);
@@ -605,7 +607,7 @@ export function analyzeSchematic(project: Project): SchematicDiagnostics {
       floatingPinIds.add(pin.id);
 
   const labelPositions = sheet.components
-    .filter((component) => component.kind === "netLabel")
+    .filter((component) => isNetworkLabel(component.kind))
     .map((component) => ({ id: component.id, point: component.position }));
   const allLabelPositions = [
     ...labelPositions,
@@ -674,7 +676,7 @@ export function nearestElectricalPoint(
   };
 
   for (const component of sheet.components) {
-    if (component.id === ignoredComponentId || component.kind === "netLabel")
+    if (component.id === ignoredComponentId || isNetworkLabel(component.kind))
       continue;
     for (const pin of component.pins)
       consider(pinPosition(component, pin.offset));

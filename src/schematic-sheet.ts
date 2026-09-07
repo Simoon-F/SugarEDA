@@ -27,6 +27,16 @@ export function renameLocalSchematicSheet(
 
 export function deleteLocalSchematicSheet(project: Project, id: string): void {
   if (project.sheets.length <= 1) return;
+  if (
+    project.sheets.some((sheet) =>
+      sheet.components.some(
+        (component) =>
+          component.kind === "sheetInstance" &&
+          component.parameters.targetSheetId === id,
+      ),
+    )
+  )
+    return;
   const index = project.sheets.findIndex((sheet) => sheet.id === id);
   if (index < 0) return;
   project.sheets.splice(index, 1);

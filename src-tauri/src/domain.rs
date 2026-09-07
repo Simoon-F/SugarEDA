@@ -86,6 +86,9 @@ pub enum ComponentKind {
     Subcircuit,
     Ground,
     NetLabel,
+    GlobalLabel,
+    HierarchicalPort,
+    SheetInstance,
     Device,
 }
 
@@ -102,7 +105,11 @@ impl ComponentKind {
             Self::Mosfet => "M",
             Self::Subcircuit => "X",
             Self::Device => "U",
-            Self::Ground | Self::NetLabel => "",
+            Self::Ground
+            | Self::NetLabel
+            | Self::GlobalLabel
+            | Self::HierarchicalPort
+            | Self::SheetInstance => "",
         }
     }
 }
@@ -337,11 +344,17 @@ pub fn component(kind: ComponentKind, x: f64, y: f64, spice_ref: &str, value: &s
         kind,
         ComponentKind::VoltageSource | ComponentKind::CurrentSource
     );
-    let pins = if kind == ComponentKind::NetLabel {
+    let pins = if matches!(
+        kind,
+        ComponentKind::NetLabel | ComponentKind::GlobalLabel | ComponentKind::HierarchicalPort
+    ) {
         vec![Pin {
             id: "1".into(),
             name: "NET".into(),
             offset: Point { x: 0.0, y: 0.0 },
+            // Labels and hierarchy ports are connectivity declarations, not
+            // physical device pins that should produce floating-pin markers.
+            allow_floating: true,
             ..Pin::default()
         }]
     } else if kind == ComponentKind::Ground {
@@ -384,6 +397,9 @@ pub fn component(kind: ComponentKind, x: f64, y: f64, spice_ref: &str, value: &s
     };
     let mut parameters = BTreeMap::new();
     parameters.insert("value".into(), value.into());
+    if kind == ComponentKind::HierarchicalPort {
+        parameters.insert("direction".into(), "bidirectional".into());
+    }
     Component {
         id: Uuid::new_v4(),
         kind,

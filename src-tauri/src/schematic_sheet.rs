@@ -66,6 +66,16 @@ pub fn remove(project: &mut Project, id: Uuid) -> Result<(), String> {
     if project.sheets.len() <= 1 {
         return Err("A project must keep at least one schematic sheet".into());
     }
+    if project.sheets.iter().any(|sheet| {
+        sheet.components.iter().any(|component| {
+            component.kind == crate::domain::ComponentKind::SheetInstance
+                && component.parameters.get("targetSheetId") == Some(&id.to_string())
+        })
+    }) {
+        return Err(
+            "A referenced child sheet cannot be deleted; remove its sheet instance first".into(),
+        );
+    }
     let index = project
         .sheets
         .iter()

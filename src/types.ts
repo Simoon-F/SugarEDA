@@ -11,6 +11,9 @@ export type ComponentKind =
   | "subcircuit"
   | "ground"
   | "netLabel"
+  | "globalLabel"
+  | "hierarchicalPort"
+  | "sheetInstance"
   | "device";
 export type PinElectricalType =
   | "passive"
@@ -83,6 +86,7 @@ export type ComponentPlacement = {
     unitId?: string | null;
     logicalInstanceId?: string | null;
   };
+  sheetTargetId?: string;
 };
 
 export type DevicePackCapability = {
@@ -526,6 +530,13 @@ export type EditorCommand =
   | { action: "deleteSheet"; id: string }
   | { action: "selectSheet"; id: string }
   | { action: "addComponent"; kind: ComponentKind; position: Point }
+  | { action: "addSheetInstance"; targetSheetId: string; position: Point }
+  | {
+      action: "updateConnector";
+      id: string;
+      name: string;
+      direction?: "input" | "output" | "bidirectional" | "passive" | null;
+    }
   | {
       action: "addModelComponent";
       libraryId: string;

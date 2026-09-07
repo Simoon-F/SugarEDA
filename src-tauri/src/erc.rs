@@ -111,18 +111,24 @@ fn issue(
 }
 
 pub fn check(project: &Project) -> ErcReport {
-    let mut combined = ErcReport {
-        passed: true,
-        issues: Vec::new(),
-        checked_devices: 0,
-        checked_pins: 0,
+    let sheet = match crate::hierarchy::flatten_for_erc(project) {
+        Ok(sheet) => sheet,
+        Err(error) => {
+            return ErcReport {
+                passed: false,
+                issues: vec![issue(
+                    "erc.invalid_hierarchy",
+                    project.metadata.id,
+                    None,
+                    format!("层次原理图无效：{error}"),
+                    format!("Invalid schematic hierarchy: {error}"),
+                )],
+                checked_devices: 0,
+                checked_pins: 0,
+            };
+        }
     };
-    for sheet in &project.sheets {
-        let report = check_sheet(sheet);
-        combined.issues.extend(report.issues);
-        combined.checked_devices += report.checked_devices;
-        combined.checked_pins += report.checked_pins;
-    }
+    let mut combined = check_sheet(&sheet);
     combined.issues.sort_by(|a, b| {
         (a.device_id, a.pin_id.as_deref(), a.code).cmp(&(b.device_id, b.pin_id.as_deref(), b.code))
     });
@@ -146,9 +152,29 @@ fn check_sheet(sheet: &crate::domain::SchematicSheet) -> ErcReport {
             })
         })
         .collect();
+    let connectors: Vec<(String, Key)> = sheet
+        .components
+        .iter()
+        .filter(|component| crate::hierarchy::is_label(&component.kind))
+        .map(|component| {
+            (
+                crate::hierarchy::connector_name(component).to_ascii_lowercase(),
+                key(component.position),
+            )
+        })
+        .chain(
+            sheet
+                .net_labels
+                .iter()
+                .map(|label| (label.name.to_ascii_lowercase(), key(label.position))),
+        )
+        .collect();
     let mut uf = UnionFind::default();
     for pin in &pins {
         uf.add(pin.point);
+    }
+    for (_, point) in &connectors {
+        uf.add(*point);
     }
     let mut wire_points = BTreeSet::new();
     for wire in &sheet.wires {
@@ -165,6 +191,11 @@ fn check_sheet(sheet: &crate::domain::SchematicSheet) -> ErcReport {
                     uf.union(a, pin.point);
                 }
             }
+            for (_, point) in &connectors {
+                if on_segment(*point, a, b) {
+                    uf.union(a, *point);
+                }
+            }
             for other in &sheet.wires {
                 for point in &other.points {
                     let p = key(*point);
@@ -173,6 +204,12 @@ fn check_sheet(sheet: &crate::domain::SchematicSheet) -> ErcReport {
                     }
                 }
             }
+        }
+    }
+    let mut connector_roots = HashMap::new();
+    for (name, point) in &connectors {
+        if let Some(previous) = connector_roots.insert(name, *point) {
+            uf.union(previous, *point);
         }
     }
     let mut roots_with_wire = BTreeSet::new();
@@ -463,6 +500,45 @@ mod tests {
             2
         );
         assert_eq!(project.ui_view_state.active_sheet_id, second);
+    }
+
+    #[test]
+    fn global_label_exposes_cross_sheet_power_output_conflicts() {
+        let mut project = Project::blank("cross-sheet erc");
+        let first = test_component(
+            100.0,
+            vec![pin("out-a", 20.0, PinElectricalType::PowerOutput)],
+        );
+        let global_a =
+            crate::domain::component(ComponentKind::GlobalLabel, 140.0, 100.0, "", "VCC_SHARED");
+        project.sheets[0].components.extend([first, global_a]);
+        project.sheets[0].wires.push(crate::domain::Wire {
+            id: Uuid::new_v4(),
+            points: vec![Point { x: 120.0, y: 100.0 }, Point { x: 140.0, y: 100.0 }],
+        });
+
+        crate::schematic_sheet::add(&mut project, "Power".into()).unwrap();
+        let second = test_component(
+            200.0,
+            vec![pin("out-b", -20.0, PinElectricalType::PowerOutput)],
+        );
+        let global_b =
+            crate::domain::component(ComponentKind::GlobalLabel, 160.0, 100.0, "", "VCC_SHARED");
+        project.sheets[1].components.extend([second, global_b]);
+        project.sheets[1].wires.push(crate::domain::Wire {
+            id: Uuid::new_v4(),
+            points: vec![Point { x: 180.0, y: 100.0 }, Point { x: 160.0, y: 100.0 }],
+        });
+
+        let report = check(&project);
+        assert_eq!(
+            report
+                .issues
+                .iter()
+                .filter(|issue| issue.code == "erc.power_output_conflict")
+                .count(),
+            2
+        );
     }
 
     #[test]

@@ -31,6 +31,8 @@ pub enum ProjectError {
     InvalidActiveSheet,
     #[error("project schematic sheets are invalid: {0}")]
     InvalidSheet(String),
+    #[error("project hierarchy is invalid: {0}")]
+    Hierarchy(String),
     #[error("embedded SPICE model is invalid: {0}")]
     Model(#[from] ModelImportError),
     #[error("embedded device pack is invalid: {0}")]
@@ -98,6 +100,7 @@ pub fn validate(project: &Project) -> Result<(), ProjectError> {
         return Err(ProjectError::InvalidActiveSheet);
     }
     crate::schematic_sheet::validate(project).map_err(ProjectError::InvalidSheet)?;
+    crate::hierarchy::validate(project).map_err(ProjectError::Hierarchy)?;
     for sheet in &project.sheets {
         if sheet.components.iter().any(|component| {
             !component.position.x.is_finite()

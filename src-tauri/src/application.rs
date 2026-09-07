@@ -50,6 +50,15 @@ pub enum EditorCommand {
         kind: ComponentKind,
         position: Point,
     },
+    AddSheetInstance {
+        target_sheet_id: Uuid,
+        position: Point,
+    },
+    UpdateConnector {
+        id: Uuid,
+        name: String,
+        direction: Option<String>,
+    },
     AddModelComponent {
         library_id: Uuid,
         model_name: String,
@@ -241,6 +250,11 @@ impl Workspace {
                     }
                     ComponentKind::Ground => ("", ""),
                     ComponentKind::NetLabel => ("", "net"),
+                    ComponentKind::GlobalLabel => ("", "global_net"),
+                    ComponentKind::HierarchicalPort => ("", "PORT"),
+                    ComponentKind::SheetInstance => {
+                        return Err("Sheet instances require an explicit target sheet".into())
+                    }
                     ComponentKind::Device => {
                         return Err(
                             "Device-pack components must be added from the device library".into(),
@@ -269,6 +283,35 @@ impl Workspace {
                 crate::schematic_sheet::active_mut(&mut self.project)?
                     .components
                     .push(component(kind, position.x, position.y, &reference, value));
+            }
+            EditorCommand::AddSheetInstance {
+                target_sheet_id,
+                position,
+            } => {
+                crate::hierarchy::add_sheet_instance(&mut self.project, target_sheet_id, position)?;
+            }
+            EditorCommand::UpdateConnector {
+                id,
+                name,
+                direction,
+            } => {
+                let target = self.component_mut(id)?;
+                if !matches!(
+                    target.kind,
+                    ComponentKind::NetLabel
+                        | ComponentKind::GlobalLabel
+                        | ComponentKind::HierarchicalPort
+                ) {
+                    return Err("Only schematic connectors can use this command".into());
+                }
+                target.parameters.insert("value".into(), name.clone());
+                target.display_name = name;
+                if target.kind == ComponentKind::HierarchicalPort {
+                    target.parameters.insert(
+                        crate::hierarchy::PORT_DIRECTION.into(),
+                        direction.unwrap_or_else(|| "bidirectional".into()),
+                    );
+                }
             }
             EditorCommand::AddModelComponent {
                 library_id,
@@ -346,7 +389,7 @@ impl Workspace {
                     .find(|component| component.id == id)
                     .ok_or_else(|| format!("Component {id} no longer exists"))?;
                 let old_position = component.position;
-                let attached_pins = if component.kind == ComponentKind::NetLabel {
+                let attached_pins = if crate::hierarchy::is_label(&component.kind) {
                     vec![]
                 } else {
                     component
@@ -380,7 +423,7 @@ impl Workspace {
                     .iter()
                     .filter(|component| {
                         component_ids.contains(&component.id)
-                            && component.kind != ComponentKind::NetLabel
+                            && !crate::hierarchy::is_label(&component.kind)
                     })
                     .flat_map(|component| {
                         component.pins.iter().map(|pin| {
@@ -708,6 +751,10 @@ impl Workspace {
                     return Err("Device pack no longer exists".into());
                 }
             }
+        }
+        if let Err(error) = crate::hierarchy::synchronize(&mut self.project) {
+            self.project = before;
+            return Err(error);
         }
         self.project.updated_at = Utc::now();
         self.undo.push(before);
@@ -1048,6 +1095,66 @@ mod tests {
         assert!(workspace.undo());
         assert_eq!(workspace.project.sheets.len(), 2);
         assert_eq!(workspace.project.sheets[1].components.len(), 1);
+    }
+
+    #[test]
+    fn hierarchical_ports_and_sheet_instances_are_undoable() {
+        let mut workspace = Workspace::new(Project::blank("hierarchy"));
+        let root = workspace.project.sheets[0].id;
+        workspace
+            .apply(EditorCommand::AddSheet {
+                name: "Child".into(),
+            })
+            .unwrap();
+        let child = workspace.project.ui_view_state.active_sheet_id;
+        workspace
+            .apply(EditorCommand::AddComponent {
+                kind: ComponentKind::HierarchicalPort,
+                position: Point { x: 20.0, y: 20.0 },
+            })
+            .unwrap();
+        let port = workspace.project.sheets[1].components[0].id;
+        assert!(workspace.project.sheets[1].components[0].pins[0].allow_floating);
+        workspace
+            .apply(EditorCommand::SelectSheet { id: root })
+            .unwrap();
+        workspace
+            .apply(EditorCommand::AddSheetInstance {
+                target_sheet_id: child,
+                position: Point { x: 200.0, y: 200.0 },
+            })
+            .unwrap();
+        assert_eq!(workspace.project.sheets[0].components[0].pins.len(), 1);
+        workspace
+            .apply(EditorCommand::UpdateConnector {
+                id: port,
+                name: "DATA_IN".into(),
+                direction: Some("input".into()),
+            })
+            .unwrap();
+        assert_eq!(
+            workspace.project.sheets[0].components[0].pins[0].name,
+            "DATA_IN"
+        );
+        assert_eq!(
+            workspace.project.sheets[1].components[0]
+                .parameters
+                .get(crate::hierarchy::PORT_DIRECTION)
+                .map(String::as_str),
+            Some("input")
+        );
+        assert!(workspace.undo());
+        assert_eq!(
+            workspace.project.sheets[0].components[0].pins[0].name,
+            "PORT"
+        );
+        assert!(workspace.undo());
+        assert!(workspace.project.sheets[0].components.is_empty());
+        assert!(workspace.redo());
+        assert_eq!(
+            workspace.project.sheets[0].components[0].kind,
+            ComponentKind::SheetInstance
+        );
     }
 
     #[test]

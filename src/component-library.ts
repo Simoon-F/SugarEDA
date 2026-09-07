@@ -9,6 +9,7 @@ export type LibraryGroup = {
     glyph: string;
     model?: { libraryId: string; modelName: string };
     device?: ComponentPlacement["device"];
+    sheetTargetId?: string;
   }[];
 };
 
@@ -72,10 +73,20 @@ export function buildVisibleLibrary(
         }));
       }),
   );
+  const hierarchy: LibraryGroup["items"] = project.sheets
+    .filter((sheet) => sheet.id !== project.uiViewState.activeSheetId)
+    .map((sheet) => ({
+      kind: "sheetInstance" as const,
+      name: sheet.name,
+      shortcut: "H",
+      glyph: "▤",
+      sheetTargetId: sheet.id,
+    }));
   const groups: LibraryGroup[] = imported.length
     ? [...base, { group: "IMPORTED MODELS", items: imported }]
     : [...base];
   if (packed.length) groups.push({ group: "DEVICE PACKS", items: packed });
+  if (hierarchy.length) groups.push({ group: "HIERARCHY", items: hierarchy });
   const normalized = query.trim().toLowerCase();
   return groups
     .map((group) => ({
