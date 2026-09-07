@@ -1,4 +1,5 @@
 import type { Component, Point, Project, Wire } from "./types";
+import { activeSchematicSheet } from "./schematic-sheet";
 
 export const GRID = 20;
 const SPATIAL_BUCKET_SIZE = 400;
@@ -539,7 +540,7 @@ export type SchematicDiagnostics = {
 
 /** Lightweight, live electrical-rule diagnostics used by the canvas. */
 export function analyzeSchematic(project: Project): SchematicDiagnostics {
-  const sheet = project.sheets[0];
+  const sheet = activeSchematicSheet(project);
   const floatingPinIds = new Set<string>();
   const brokenWireIds = new Set<string>();
   const brokenWireEndpoints = new Set<string>();
@@ -660,7 +661,7 @@ export function nearestElectricalPoint(
   ignoredComponentId?: string,
   ignoredWireId?: string,
 ): Point | null {
-  const sheet = project.sheets[0];
+  const sheet = activeSchematicSheet(project);
   if (!sheet) return null;
   let best: Point | null = null;
   let bestDistance = maxDistance;

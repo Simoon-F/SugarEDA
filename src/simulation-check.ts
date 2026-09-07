@@ -6,6 +6,7 @@ import type {
   SimulationCheckReport,
   SimulationProfile,
 } from "./types";
+import { activeSchematicSheet } from "./schematic-sheet";
 
 export type ProbeOption = {
   value: string;
@@ -16,7 +17,7 @@ export type ProbeOption = {
 const identifier = (value: string) => /^[A-Za-z_][A-Za-z0-9_]*$/.test(value);
 
 export function availableProbeOptions(project: Project): ProbeOption[] {
-  const sheet = project.sheets[0];
+  const sheet = activeSchematicSheet(project);
   if (!sheet) return [];
   const names = new Set<string>();
   for (const label of sheet.netLabels)
@@ -106,7 +107,7 @@ export function localSimulationCheck(
   project: Project,
   profile: SimulationProfile,
 ): SimulationCheckReport {
-  const sheet = project.sheets[0];
+  const sheet = activeSchematicSheet(project);
   const diagnostics = analyzeSchematic(project);
   const issues: SimulationCheckIssue[] = [];
   const add = (

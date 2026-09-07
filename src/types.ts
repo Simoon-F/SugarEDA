@@ -521,6 +521,10 @@ export type SimulationResult = {
   executionTimeMs: number;
 };
 export type EditorCommand =
+  | { action: "addSheet"; name: string }
+  | { action: "renameSheet"; id: string; name: string }
+  | { action: "deleteSheet"; id: string }
+  | { action: "selectSheet"; id: string }
   | { action: "addComponent"; kind: ComponentKind; position: Point }
   | {
       action: "addModelComponent";

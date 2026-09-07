@@ -6,6 +6,7 @@ import type {
   Project,
   Wire,
 } from "./types";
+import { activeSchematicSheet } from "./schematic-sheet";
 
 export type ClipboardPayload = {
   components: Component[];
@@ -31,7 +32,8 @@ export function clipboardFromSelection(
   project: Project,
   selected: Set<string>,
 ): ClipboardPayload {
-  const components = project.sheets[0].components
+  const sheet = activeSchematicSheet(project);
+  const components = sheet.components
     .filter((component) => selected.has(component.id))
     .map((component) => structuredClone(component));
   const logicalIds = new Set(
@@ -43,7 +45,7 @@ export function clipboardFromSelection(
   );
   return {
     components,
-    wires: project.sheets[0].wires
+    wires: sheet.wires
       .filter((wire) => selected.has(wire.id))
       .map((wire) => structuredClone(wire)),
     deviceInstances: project.deviceInstances
@@ -59,13 +61,17 @@ export function clipboardFromSelection(
 
 export function instantiateClipboard(
   clipboard: ClipboardPayload,
-  sheet: Project["sheets"][number],
+  project: Project,
   offset: Point,
   reservedReferences?: Set<string>,
 ): ClipboardPayload {
   const used = new Set(
     [
-      ...sheet.components.map((component) => component.spiceRef.toLowerCase()),
+      ...project.sheets.flatMap((candidate) =>
+        candidate.components.map((component) =>
+          component.spiceRef.toLowerCase(),
+        ),
+      ),
       ...(reservedReferences ?? []),
     ].filter(Boolean),
   );

@@ -5,6 +5,13 @@ import "./app.css";
 import { api, isDesktop } from "./bridge";
 import { createBlankSnapshot } from "./blank";
 import { SchematicCanvas } from "./schematic-canvas";
+import { SchematicTabs } from "./schematic-tabs";
+import {
+  activeSchematicSheet,
+  addLocalSchematicSheet,
+  deleteLocalSchematicSheet,
+  renameLocalSchematicSheet,
+} from "./schematic-sheet";
 import { Waveform } from "./waveform";
 import { SimulationConfig } from "./simulation-config";
 import { SimulationCheckPanel } from "./simulation-check-panel";
@@ -312,7 +319,7 @@ function App() {
     useState<PendingTransition | null>(null);
   const [transitionSaving, setTransitionSaving] = useState(false);
   const [query, setQuery] = useState("");
-  const sheet = snapshot.project.sheets[0];
+  const sheet = activeSchematicSheet(snapshot.project);
   const selectedComponent = sheet.components.find((c) => c.id === selected[0]);
   const profile =
     snapshot.project.simulationProfiles.find(
@@ -433,33 +440,53 @@ function App() {
     dirtyRef.current = true;
     setSnapshot((current) => {
       const next = structuredClone(current);
-      if (command.action === "moveComponent") {
-        const c = next.project.sheets[0].components.find(
-          (c) => c.id === command.id,
-        );
+      const activeSheet = activeSchematicSheet(next.project);
+      if (command.action === "addSheet") {
+        addLocalSchematicSheet(next.project, command.name);
+      } else if (command.action === "renameSheet") {
+        renameLocalSchematicSheet(next.project, command.id, command.name);
+      } else if (command.action === "deleteSheet") {
+        deleteLocalSchematicSheet(next.project, command.id);
+        removeOrphanDeviceInstances(next.project);
+      } else if (command.action === "selectSheet") {
+        if (
+          next.project.sheets.some((candidate) => candidate.id === command.id)
+        )
+          next.project.uiViewState.activeSheetId = command.id;
+      } else if (command.action === "moveComponent") {
+        const c = activeSheet.components.find((c) => c.id === command.id);
         if (c) {
-          next.project.sheets[0].wires = next.project.sheets[0].wires.map(
-            (wire) => ({
-              ...wire,
-              points: moveWireWithComponent(wire.points, c, command.position),
-            }),
-          );
+          activeSheet.wires = activeSheet.wires.map((wire) => ({
+            ...wire,
+            points: moveWireWithComponent(wire.points, c, command.position),
+          }));
           c.position = command.position;
         }
       } else if (command.action === "moveSelection") {
         moveLocalSelection(
-          next.project.sheets[0].components,
-          next.project.sheets[0].wires,
+          activeSheet.components,
+          activeSheet.wires,
           command.componentIds,
           command.wireIds,
           command.delta,
         );
       } else if (command.action === "updateComponent") {
-        const c = next.project.sheets[0].components.find(
-          (c) => c.id === command.id,
-        );
+        const c = activeSheet.components.find((c) => c.id === command.id);
         if (c) {
           const logicalId = c.device?.logicalInstanceId;
+          const owner = logicalId ?? c.id;
+          const duplicateReference =
+            command.spiceRef.length > 0 &&
+            next.project.sheets
+              .flatMap((candidate) => candidate.components)
+              .some(
+                (candidate) =>
+                  candidate.spiceRef.toLowerCase() ===
+                    command.spiceRef.toLowerCase() &&
+                  (candidate.device?.logicalInstanceId ?? candidate.id) !==
+                    owner,
+              );
+          if (duplicateReference) return current;
           if (logicalId) {
             const instance = next.project.deviceInstances.find(
               (item) => item.id === logicalId,
@@ -482,24 +509,21 @@ function App() {
           c.parameters.value = command.value;
         }
       } else if (command.action === "rotateComponent") {
-        const c = next.project.sheets[0].components.find(
-          (c) => c.id === command.id,
-        );
+        const c = activeSheet.components.find((c) => c.id === command.id);
         if (c) c.rotation = (c.rotation + 90) % 360;
       } else if (command.action === "deleteSelection") {
-        next.project.sheets[0].components =
-          next.project.sheets[0].components.filter(
-            (c) => !command.componentIds.includes(c.id),
-          );
-        next.project.sheets[0].wires = next.project.sheets[0].wires.filter(
+        activeSheet.components = activeSheet.components.filter(
+          (c) => !command.componentIds.includes(c.id),
+        );
+        activeSheet.wires = activeSheet.wires.filter(
           (w) => !command.wireIds.includes(w.id),
         );
         removeOrphanDeviceInstances(next.project);
       } else if (command.action === "insertSelection") {
         next.project.deviceInstances.push(...command.deviceInstances);
         next.project.boardConfigurations.push(...command.boardConfigurations);
-        next.project.sheets[0].components.push(...command.components);
-        next.project.sheets[0].wires.push(...command.wires);
+        activeSheet.components.push(...command.components);
+        activeSheet.wires.push(...command.wires);
       } else if (command.action === "removeBoardConfiguration") {
         next.project.boardConfigurations =
           next.project.boardConfigurations.filter(
@@ -516,14 +540,12 @@ function App() {
           (pack) => pack.sha256 !== command.packSha256,
         );
       } else if (command.action === "addWire")
-        next.project.sheets[0].wires.push({
+        activeSheet.wires.push({
           id: crypto.randomUUID(),
           points: command.points,
         });
       else if (command.action === "updateWire") {
-        const wire = next.project.sheets[0].wires.find(
-          (item) => item.id === command.id,
-        );
+        const wire = activeSheet.wires.find((item) => item.id === command.id);
         if (wire) wire.points = command.points;
       } else if (command.action === "updateView")
         next.project.uiViewState = {
@@ -573,11 +595,18 @@ function App() {
         const kind: ComponentKind =
           definition.kind === "bipolar" ? "bipolarTransistor" : definition.kind;
         const leftCount = Math.ceil(definition.pins.length / 2);
-        const sequence =
-          next.project.sheets[0].components.filter((component) =>
-            component.spiceRef.startsWith(prefix),
-          ).length + 1;
-        next.project.sheets[0].components.push({
+        let sequence = 1;
+        while (
+          next.project.sheets
+            .flatMap((candidate) => candidate.components)
+            .some(
+              (component) =>
+                component.spiceRef.toLowerCase() ===
+                `${prefix}${sequence}`.toLowerCase(),
+            )
+        )
+          sequence += 1;
+        activeSheet.components.push({
           id: crypto.randomUUID(),
           kind,
           position: command.position,
@@ -608,7 +637,7 @@ function App() {
       } else if (command.action === "addDeviceComponent") {
         if (!placeLocalDeviceUnit(next.project, command)) return current;
       } else if (command.action === "setPinNoConnect") {
-        const component = next.project.sheets[0].components.find(
+        const component = activeSheet.components.find(
           (item) => item.id === command.componentId,
         );
         const pin = component?.pins.find((item) => item.id === command.pinId);
@@ -643,11 +672,19 @@ function App() {
                     { id: "1", name: "1", offset: { x: -40, y: 0 } },
                     { id: "2", name: "2", offset: { x: 40, y: 0 } },
                   ];
-        const n =
-          next.project.sheets[0].components.filter(
-            (c) => c.kind === command.kind,
-          ).length + 1;
-        next.project.sheets[0].components.push({
+        let n = 1;
+        while (
+          prefix &&
+          next.project.sheets
+            .flatMap((candidate) => candidate.components)
+            .some(
+              (component) =>
+                component.spiceRef.toLowerCase() ===
+                `${prefix}${n}`.toLowerCase(),
+            )
+        )
+          n += 1;
+        activeSheet.components.push({
           id: crypto.randomUUID(),
           kind: command.kind,
           position: command.position,
@@ -729,7 +766,7 @@ function App() {
       const sequence = steps ?? pasteSequence.current + 1;
       const inserted = instantiateClipboard(
         source,
-        sheet,
+        snapshot.project,
         {
           x: GRID * sequence,
           y: GRID * sequence,
@@ -750,7 +787,7 @@ function App() {
       ]);
       setTool("select");
     },
-    [command, sheet],
+    [command, snapshot.project],
   );
   const duplicateSelection = useCallback(async () => {
     if (!copySelection()) return;
@@ -1031,12 +1068,21 @@ function App() {
           : {
               passed: true,
               issues: [],
-              checkedDevices: sheet.components.filter(
-                (item) => item.kind === "device",
-              ).length,
-              checkedPins: sheet.components
-                .filter((item) => item.kind === "device")
-                .reduce((sum, item) => sum + item.pins.length, 0),
+              checkedDevices: snapshot.project.sheets.reduce(
+                (total, candidate) =>
+                  total +
+                  candidate.components.filter((item) => item.kind === "device")
+                    .length,
+                0,
+              ),
+              checkedPins: snapshot.project.sheets.reduce(
+                (total, candidate) =>
+                  total +
+                  candidate.components
+                    .filter((item) => item.kind === "device")
+                    .reduce((sum, item) => sum + item.pins.length, 0),
+                0,
+              ),
             },
       );
     } catch (error) {
@@ -1273,10 +1319,21 @@ function App() {
   const selectProfile = (id: string) =>
     void command({ action: "selectSimulationProfile", id });
   const locateCheckIssue = (componentId: string) => {
-    setTool("select");
-    setPlacement(null);
-    setSelected([componentId]);
-    setFocusRequest({ componentId, nonce: Date.now() });
+    const targetSheet = snapshot.project.sheets.find((candidate) =>
+      candidate.components.some((component) => component.id === componentId),
+    );
+    if (!targetSheet) return;
+    const focus = () => {
+      setTool("select");
+      setPlacement(null);
+      setSelected([componentId]);
+      setFocusRequest({ componentId, nonce: Date.now() });
+    };
+    if (targetSheet.id === snapshot.project.uiViewState.activeSheetId) focus();
+    else {
+      setSelected([]);
+      void command({ action: "selectSheet", id: targetSheet.id }).then(focus);
+    }
   };
   const locateBoardConfigurationIssue = (
     logicalInstanceId: string,
@@ -1618,6 +1675,16 @@ function App() {
           </div>
         </aside>
         <section className="editor">
+          <SchematicTabs
+            project={snapshot.project}
+            language={language}
+            onCommand={(nextCommand) => void command(nextCommand)}
+            onBeforeSwitch={() => {
+              setSelected([]);
+              setPlacement(null);
+              setExternalDrop(null);
+            }}
+          />
           <TooltipProvider delayDuration={300}>
             <div className="editor-tools">
               <div className="tool-group">
@@ -1771,7 +1838,10 @@ function App() {
             <h3>{t("DOCUMENT")}</h3>
             <dl>
               <dt>{t("Sheet")}</dt>
-              <dd>{t("Main")} · 1 / 1</dd>
+              <dd>
+                {sheet.name} · {snapshot.project.sheets.indexOf(sheet) + 1} /{" "}
+                {snapshot.project.sheets.length}
+              </dd>
               <dt>{t("Components")}</dt>
               <dd>{sheet.components.length}</dd>
               <dt>{t("Nets")}</dt>

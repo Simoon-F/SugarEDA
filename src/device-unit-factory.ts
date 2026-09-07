@@ -1,5 +1,6 @@
 import { deviceCapabilities } from "./device-pack";
 import type { EditorCommand, Project } from "./types";
+import { activeSchematicSheet } from "./schematic-sheet";
 
 type AddDeviceCommand = Extract<
   EditorCommand,
@@ -11,6 +12,7 @@ export function placeLocalDeviceUnit(
   project: Project,
   command: AddDeviceCommand,
 ): boolean {
+  const activeSheet = activeSchematicSheet(project);
   const embedded = project.devicePacks.find(
     (pack) => pack.sha256 === command.packSha256,
   );
@@ -88,10 +90,12 @@ export function placeLocalDeviceUnit(
   const prefix = definition ? "X" : "U";
   let sequence = 1;
   while (
-    project.sheets[0].components.some(
-      (item) =>
-        item.spiceRef.toLowerCase() === `${prefix}${sequence}`.toLowerCase(),
-    )
+    project.sheets
+      .flatMap((sheet) => sheet.components)
+      .some(
+        (item) =>
+          item.spiceRef.toLowerCase() === `${prefix}${sequence}`.toLowerCase(),
+      )
   )
     sequence += 1;
   const reference = instance?.reference ?? `${prefix}${sequence}`;
@@ -119,7 +123,7 @@ export function placeLocalDeviceUnit(
       capabilities,
     });
 
-  project.sheets[0].components.push({
+  activeSheet.components.push({
     id: crypto.randomUUID(),
     kind: "device",
     position: command.position,

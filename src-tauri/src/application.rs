@@ -33,6 +33,19 @@ pub struct Workspace {
     rename_all_fields = "camelCase"
 )]
 pub enum EditorCommand {
+    AddSheet {
+        name: String,
+    },
+    RenameSheet {
+        id: Uuid,
+        name: String,
+    },
+    DeleteSheet {
+        id: Uuid,
+    },
+    SelectSheet {
+        id: Uuid,
+    },
     AddComponent {
         kind: ComponentKind,
         position: Point,
@@ -177,6 +190,12 @@ impl Workspace {
         }
     }
     pub fn apply(&mut self, command: EditorCommand) -> Result<(), String> {
+        if let EditorCommand::SelectSheet { id } = command {
+            crate::schematic_sheet::select(&mut self.project, id)?;
+            self.project.updated_at = Utc::now();
+            self.dirty = true;
+            return Ok(());
+        }
         if let EditorCommand::UpdateView {
             zoom,
             pan,
@@ -195,6 +214,18 @@ impl Workspace {
         }
         let before = self.project.clone();
         match command {
+            EditorCommand::AddSheet { name } => {
+                crate::schematic_sheet::add(&mut self.project, name)?;
+            }
+            EditorCommand::RenameSheet { id, name } => {
+                crate::schematic_sheet::rename(&mut self.project, id, name)?;
+            }
+            EditorCommand::DeleteSheet { id } => {
+                crate::schematic_sheet::remove(&mut self.project, id)?;
+            }
+            EditorCommand::SelectSheet { .. } => {
+                unreachable!("sheet selection returns before the undoable edit path")
+            }
             EditorCommand::AddComponent { kind, position } => {
                 let (prefix, value) = match kind {
                     ComponentKind::Resistor => ("R", "1k"),
@@ -218,10 +249,15 @@ impl Workspace {
                 };
                 let mut number = 1;
                 while !prefix.is_empty()
-                    && self.project.sheets[0].components.iter().any(|c| {
-                        c.spice_ref
-                            .eq_ignore_ascii_case(&format!("{prefix}{number}"))
-                    })
+                    && self
+                        .project
+                        .sheets
+                        .iter()
+                        .flat_map(|sheet| &sheet.components)
+                        .any(|c| {
+                            c.spice_ref
+                                .eq_ignore_ascii_case(&format!("{prefix}{number}"))
+                        })
                 {
                     number += 1;
                 }
@@ -230,7 +266,7 @@ impl Workspace {
                 } else {
                     format!("{prefix}{number}")
                 };
-                self.project.sheets[0]
+                crate::schematic_sheet::active_mut(&mut self.project)?
                     .components
                     .push(component(kind, position.x, position.y, &reference, value));
             }
@@ -259,19 +295,27 @@ impl Workspace {
                     crate::domain::SpiceModelKind::Subcircuit => "X",
                 };
                 let mut number = 1;
-                while self.project.sheets[0].components.iter().any(|component| {
-                    component
-                        .spice_ref
-                        .eq_ignore_ascii_case(&format!("{prefix}{number}"))
-                }) {
+                while self
+                    .project
+                    .sheets
+                    .iter()
+                    .flat_map(|sheet| &sheet.components)
+                    .any(|component| {
+                        component
+                            .spice_ref
+                            .eq_ignore_ascii_case(&format!("{prefix}{number}"))
+                    })
+                {
                     number += 1;
                 }
-                self.project.sheets[0].components.push(modeled_component(
-                    &definition,
-                    library_id,
-                    position,
-                    &format!("{prefix}{number}"),
-                ));
+                crate::schematic_sheet::active_mut(&mut self.project)?
+                    .components
+                    .push(modeled_component(
+                        &definition,
+                        library_id,
+                        position,
+                        &format!("{prefix}{number}"),
+                    ));
             }
             EditorCommand::AddDeviceComponent {
                 pack_sha256,
@@ -290,10 +334,12 @@ impl Workspace {
                     logical_instance_id,
                     position,
                 )?;
-                self.project.sheets[0].components.push(component);
+                crate::schematic_sheet::active_mut(&mut self.project)?
+                    .components
+                    .push(component);
             }
             EditorCommand::MoveComponent { id, position } => {
-                let sheet = &mut self.project.sheets[0];
+                let sheet = crate::schematic_sheet::active_mut(&mut self.project)?;
                 let component = sheet
                     .components
                     .iter_mut()
@@ -326,7 +372,7 @@ impl Workspace {
                 if !delta.x.is_finite() || !delta.y.is_finite() {
                     return Err("Movement delta must be finite".into());
                 }
-                let sheet = &mut self.project.sheets[0];
+                let sheet = crate::schematic_sheet::active_mut(&mut self.project)?;
                 let component_ids: HashSet<_> = component_ids.into_iter().collect();
                 let wire_ids: HashSet<_> = wire_ids.into_iter().collect();
                 let attached_pins: Vec<_> = sheet
@@ -386,6 +432,38 @@ impl Workspace {
                 spice_ref,
                 value,
             } => {
+                let reference_owner = self
+                    .project
+                    .sheets
+                    .iter()
+                    .flat_map(|sheet| &sheet.components)
+                    .find(|component| component.id == id)
+                    .map(|component| {
+                        component
+                            .device
+                            .as_ref()
+                            .and_then(|binding| binding.logical_instance_id)
+                            .unwrap_or(component.id)
+                    })
+                    .ok_or_else(|| format!("Component {id} no longer exists"))?;
+                if !spice_ref.is_empty()
+                    && self
+                        .project
+                        .sheets
+                        .iter()
+                        .flat_map(|sheet| &sheet.components)
+                        .any(|component| {
+                            component.spice_ref.eq_ignore_ascii_case(&spice_ref)
+                                && component
+                                    .device
+                                    .as_ref()
+                                    .and_then(|binding| binding.logical_instance_id)
+                                    .unwrap_or(component.id)
+                                    != reference_owner
+                        })
+                {
+                    return Err(format!("Component reference '{spice_ref}' already exists"));
+                }
                 if !crate::device_instance::update_identity(
                     &mut self.project,
                     id,
@@ -420,7 +498,7 @@ impl Workspace {
                 component_ids,
                 wire_ids,
             } => {
-                let sheet = &mut self.project.sheets[0];
+                let sheet = crate::schematic_sheet::active_mut(&mut self.project)?;
                 sheet.components.retain(|c| !component_ids.contains(&c.id));
                 sheet.wires.retain(|w| !wire_ids.contains(&w.id));
                 crate::device_instance::remove_orphans(&mut self.project);
@@ -431,16 +509,23 @@ impl Workspace {
                 device_instances,
                 board_configurations,
             } => {
-                let sheet = &mut self.project.sheets[0];
-                let mut ids: HashSet<_> = sheet
-                    .components
+                let mut ids: HashSet<_> = self
+                    .project
+                    .sheets
                     .iter()
-                    .map(|component| component.id)
-                    .chain(sheet.wires.iter().map(|wire| wire.id))
+                    .flat_map(|sheet| {
+                        sheet
+                            .components
+                            .iter()
+                            .map(|component| component.id)
+                            .chain(sheet.wires.iter().map(|wire| wire.id))
+                    })
                     .collect();
-                let mut references: std::collections::HashMap<_, _> = sheet
-                    .components
+                let mut references: std::collections::HashMap<_, _> = self
+                    .project
+                    .sheets
                     .iter()
+                    .flat_map(|sheet| &sheet.components)
                     .filter(|component| !component.spice_ref.is_empty())
                     .map(|component| {
                         (
@@ -448,7 +533,8 @@ impl Workspace {
                             component
                                 .device
                                 .as_ref()
-                                .and_then(|binding| binding.logical_instance_id),
+                                .and_then(|binding| binding.logical_instance_id)
+                                .unwrap_or(component.id),
                         )
                     })
                     .collect();
@@ -481,7 +567,8 @@ impl Workspace {
                         let owner = component
                             .device
                             .as_ref()
-                            .and_then(|binding| binding.logical_instance_id);
+                            .and_then(|binding| binding.logical_instance_id)
+                            .unwrap_or(component.id);
                         if references
                             .get(&key)
                             .is_some_and(|existing| *existing != owner)
@@ -503,29 +590,36 @@ impl Workspace {
                 let mut candidate = self.project.clone();
                 candidate.device_instances.extend(device_instances);
                 candidate.board_configurations.extend(board_configurations);
-                candidate.sheets[0].components.extend(components);
-                candidate.sheets[0].wires.extend(wires);
+                let candidate_sheet = crate::schematic_sheet::active_mut(&mut candidate)?;
+                candidate_sheet.components.extend(components);
+                candidate_sheet.wires.extend(wires);
                 crate::device_instance::validate(&candidate)?;
                 crate::board_config::validate_project(&candidate)?;
                 self.project = candidate;
             }
             EditorCommand::AddWire { points } => {
                 validate_wire_points(&points)?;
-                self.project.sheets[0].wires.push(Wire {
-                    id: Uuid::new_v4(),
-                    points,
-                });
+                crate::schematic_sheet::active_mut(&mut self.project)?
+                    .wires
+                    .push(Wire {
+                        id: Uuid::new_v4(),
+                        points,
+                    });
             }
             EditorCommand::UpdateWire { id, points } => {
                 validate_wire_points(&points)?;
-                let target = self.project.sheets[0]
+                let target = crate::schematic_sheet::active_mut(&mut self.project)?
                     .wires
                     .iter_mut()
                     .find(|wire| wire.id == id)
                     .ok_or_else(|| format!("Wire {id} no longer exists"))?;
                 target.points = points;
             }
-            EditorCommand::DeleteWire { id } => self.project.sheets[0].wires.retain(|w| w.id != id),
+            EditorCommand::DeleteWire { id } => {
+                crate::schematic_sheet::active_mut(&mut self.project)?
+                    .wires
+                    .retain(|w| w.id != id)
+            }
             EditorCommand::UpdateView {
                 zoom: _,
                 pan: _,
@@ -625,9 +719,10 @@ impl Workspace {
         Ok(())
     }
     fn component_mut(&mut self, id: Uuid) -> Result<&mut crate::domain::Component, String> {
-        self.project.sheets[0]
-            .components
+        self.project
+            .sheets
             .iter_mut()
+            .flat_map(|sheet| &mut sheet.components)
             .find(|c| c.id == id)
             .ok_or_else(|| format!("Component {id} no longer exists"))
     }
@@ -904,6 +999,55 @@ mod tests {
         assert!(w.project.sheets[0].components.is_empty());
         assert!(w.redo());
         assert_eq!(w.project.sheets[0].components.len(), 1);
+    }
+
+    #[test]
+    fn sheet_commands_scope_edits_and_are_undoable() {
+        let mut workspace = Workspace::new(Project::blank("multi-sheet"));
+        let first = workspace.project.sheets[0].id;
+        workspace
+            .apply(EditorCommand::AddSheet {
+                name: "Power".into(),
+            })
+            .unwrap();
+        let power = workspace.project.ui_view_state.active_sheet_id;
+        workspace
+            .apply(EditorCommand::AddComponent {
+                kind: ComponentKind::Capacitor,
+                position: Point { x: 40.0, y: 60.0 },
+            })
+            .unwrap();
+        assert!(workspace.project.sheets[0].components.is_empty());
+        assert_eq!(workspace.project.sheets[1].components.len(), 1);
+
+        workspace
+            .apply(EditorCommand::SelectSheet { id: first })
+            .unwrap();
+        workspace
+            .apply(EditorCommand::AddComponent {
+                kind: ComponentKind::Resistor,
+                position: Point { x: 20.0, y: 20.0 },
+            })
+            .unwrap();
+        assert_eq!(workspace.project.sheets[0].components.len(), 1);
+        assert_eq!(workspace.project.sheets[1].components.len(), 1);
+        let power_component = workspace.project.sheets[1].components[0].id;
+        assert!(workspace
+            .apply(EditorCommand::UpdateComponent {
+                id: power_component,
+                display_name: "R1".into(),
+                spice_ref: "R1".into(),
+                value: "1u".into(),
+            })
+            .is_err());
+
+        workspace
+            .apply(EditorCommand::DeleteSheet { id: power })
+            .unwrap();
+        assert_eq!(workspace.project.sheets.len(), 1);
+        assert!(workspace.undo());
+        assert_eq!(workspace.project.sheets.len(), 2);
+        assert_eq!(workspace.project.sheets[1].components.len(), 1);
     }
 
     #[test]

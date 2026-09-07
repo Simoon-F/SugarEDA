@@ -1015,10 +1015,16 @@ pub fn instantiate(
         });
     let prefix = if model.is_some() { "X" } else { "U" };
     let mut sequence = 1;
-    while project.sheets[0].components.iter().any(|c| {
-        c.spice_ref
-            .eq_ignore_ascii_case(&format!("{prefix}{sequence}"))
-    }) {
+    while project
+        .sheets
+        .iter()
+        .flat_map(|sheet| &sheet.components)
+        .any(|component| {
+            component
+                .spice_ref
+                .eq_ignore_ascii_case(&format!("{prefix}{sequence}"))
+        })
+    {
         sequence += 1;
     }
     Ok(crate::domain::Component {

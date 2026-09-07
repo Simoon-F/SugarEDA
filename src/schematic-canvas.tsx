@@ -8,6 +8,7 @@ import type {
   Wire,
 } from "./types";
 import { useI18n } from "./i18n";
+import { activeSchematicSheet } from "./schematic-sheet";
 import {
   analyzeSchematic,
   GRID,
@@ -61,6 +62,7 @@ export const SchematicCanvas = memo(function SchematicCanvas({
   focusRequest,
 }: Props) {
   const { t } = useI18n();
+  const sheet = activeSchematicSheet(project);
   const canvas = useRef<HTMLCanvasElement>(null);
   const host = useRef<HTMLDivElement>(null);
   const [view, setView] = useState(project.uiViewState);
@@ -101,18 +103,12 @@ export const SchematicCanvas = memo(function SchematicCanvas({
   const lastFocusNonce = useRef<number | null>(null);
   const drawRef = useRef<() => void>(() => undefined);
   const selectedWire = useMemo(
-    () =>
-      project.sheets[0].wires.find((wire) => selectedIds.includes(wire.id)) ??
-      null,
-    [project, selectedIds],
+    () => sheet.wires.find((wire) => selectedIds.includes(wire.id)) ?? null,
+    [sheet, selectedIds],
   );
   const spatialIndex = useMemo(
-    () =>
-      new SchematicSpatialIndex(
-        project.sheets[0].components,
-        project.sheets[0].wires,
-      ),
-    [project.sheets],
+    () => new SchematicSpatialIndex(sheet.components, sheet.wires),
+    [sheet],
   );
   const diagnostics = useMemo(() => analyzeSchematic(project), [project]);
   const reshapeWire = useCallback(
@@ -135,7 +131,7 @@ export const SchematicCanvas = memo(function SchematicCanvas({
   useEffect(() => setView(project.uiViewState), [project.uiViewState]);
   useEffect(() => {
     if (!focusRequest || lastFocusNonce.current === focusRequest.nonce) return;
-    const component = project.sheets[0].components.find(
+    const component = sheet.components.find(
       (item) => item.id === focusRequest.componentId,
     );
     const rect = host.current?.getBoundingClientRect();
@@ -147,7 +143,7 @@ export const SchematicCanvas = memo(function SchematicCanvas({
     };
     setView((current) => ({ ...current, pan }));
     onView(view.zoom, pan);
-  }, [focusRequest, onView, project.sheets, view.zoom]);
+  }, [focusRequest, onView, sheet, view.zoom]);
   const toWorld = useCallback(
     (p: Point): Point => ({
       x: (p.x - view.pan.x) / view.zoom,
@@ -301,7 +297,6 @@ export const SchematicCanvas = memo(function SchematicCanvas({
   );
 
   const highlightedWires = useMemo(() => {
-    const sheet = project.sheets[0];
     const keys = new Set<string>();
     const ids = new Set(
       sheet.wires
@@ -328,7 +323,7 @@ export const SchematicCanvas = memo(function SchematicCanvas({
       }
     }
     return ids;
-  }, [project, selectedIds]);
+  }, [sheet, selectedIds]);
   const draw = useCallback(() => {
     const el = canvas.current;
     if (!el) return;
@@ -418,9 +413,7 @@ export const SchematicCanvas = memo(function SchematicCanvas({
       bottom: viewport.bottom + 80,
     });
     const draggedComponent = drag
-      ? project.sheets[0].components.find(
-          (component) => component.id === drag.id,
-        )
+      ? sheet.components.find((component) => component.id === drag.id)
       : undefined;
     const draggedPosition =
       drag && draggedComponent
@@ -526,7 +519,7 @@ export const SchematicCanvas = memo(function SchematicCanvas({
         },
       );
     }
-    for (const label of project.sheets[0].netLabels) {
+    for (const label of sheet.netLabels) {
       if (!pointVisible(label.position, 60)) continue;
       const s = toScreen(label.position);
       ctx.fillStyle = diagnostics.disconnectedLabelIds.has(label.id)
@@ -664,6 +657,7 @@ export const SchematicCanvas = memo(function SchematicCanvas({
   }, [
     view,
     project,
+    sheet,
     selectedIds,
     wireStart,
     pointer,
@@ -942,7 +936,7 @@ export const SchematicCanvas = memo(function SchematicCanvas({
           screen.y - wireEndpointDrag.startScreen.y,
         ) > 3
       ) {
-        const wire = project.sheets[0].wires.find(
+        const wire = sheet.wires.find(
           (item) => item.id === wireEndpointDrag.id,
         );
         const points = moveWireEndpoint(
@@ -992,9 +986,7 @@ export const SchematicCanvas = memo(function SchematicCanvas({
       const dx = world.x - drag.start.x,
         dy = world.y - drag.start.y;
       if (Math.hypot(dx, dy) > 2 / view.zoom) {
-        const component = project.sheets[0].components.find(
-          (item) => item.id === drag.id,
-        );
+        const component = sheet.components.find((item) => item.id === drag.id);
         const rawPosition = {
           x: drag.origin.x + dx,
           y: drag.origin.y + dy,
@@ -1035,13 +1027,13 @@ export const SchematicCanvas = memo(function SchematicCanvas({
         onSelect([
           ...new Set([
             ...selectedIds,
-            ...project.sheets[0].components
+            ...sheet.components
               .filter((c) => {
                 const p = toScreen(c.position);
                 return p.x >= x1 && p.x <= x2 && p.y >= y1 && p.y <= y2;
               })
               .map((c) => c.id),
-            ...project.sheets[0].wires
+            ...sheet.wires
               .filter((wire) =>
                 wireIntersectsRect(
                   wire,
@@ -1233,7 +1225,10 @@ export const SchematicCanvas = memo(function SchematicCanvas({
         </div>
       )}
       <div className="sheet-chip">
-        <span>01</span> {t("Main schematic")}
+        <span>
+          {String(project.sheets.indexOf(sheet) + 1).padStart(2, "0")}
+        </span>{" "}
+        {sheet.name}
       </div>
     </div>
   );

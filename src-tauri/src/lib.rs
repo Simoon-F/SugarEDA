@@ -15,6 +15,7 @@ mod models;
 mod netlist;
 mod project;
 mod reliability;
+mod schematic_sheet;
 mod sdk_adapter;
 mod simulation;
 mod simulation_binding;

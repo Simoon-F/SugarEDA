@@ -5,6 +5,7 @@ import {
   clipboardFromSelection,
   instantiateClipboard,
 } from "@/selection-clipboard";
+import { addLocalSchematicSheet } from "@/schematic-sheet";
 import fixture from "../examples/devicepacks/test-mcu.devicepack.json";
 import type { DevicePack } from "@/types";
 
@@ -108,13 +109,25 @@ describe("logical multi-unit devices", () => {
       project.sheets[0].components.map((component) => component.id),
     );
     const copied = clipboardFromSelection(project, selected);
-    const pasted = instantiateClipboard(copied, project.sheets[0], {
+    addLocalSchematicSheet(project, "Power");
+    project.sheets[1].components.push({
+      id: crypto.randomUUID(),
+      kind: "resistor",
+      position: { x: 0, y: 0 },
+      rotation: 0,
+      parameters: { value: "1k" },
+      pins: [],
+      displayName: "U2",
+      spiceRef: "U2",
+      model: null,
+    });
+    const pasted = instantiateClipboard(copied, project, {
       x: 20,
       y: 20,
     });
     expect(pasted.deviceInstances).toHaveLength(1);
     expect(new Set(pasted.components.map((item) => item.spiceRef))).toEqual(
-      new Set(["U2"]),
+      new Set(["U3"]),
     );
     expect(
       new Set(pasted.components.map((item) => item.device?.logicalInstanceId))

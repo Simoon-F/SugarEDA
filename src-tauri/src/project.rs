@@ -27,6 +27,10 @@ pub enum ProjectError {
     InvalidWireGeometry,
     #[error("project contains an invalid canvas view")]
     InvalidView,
+    #[error("project active sheet does not reference an existing schematic sheet")]
+    InvalidActiveSheet,
+    #[error("project schematic sheets are invalid: {0}")]
+    InvalidSheet(String),
     #[error("embedded SPICE model is invalid: {0}")]
     Model(#[from] ModelImportError),
     #[error("embedded device pack is invalid: {0}")]
@@ -86,6 +90,14 @@ pub fn validate(project: &Project) -> Result<(), ProjectError> {
     if project.sheets.is_empty() {
         return Err(ProjectError::NoSheets);
     }
+    if !project
+        .sheets
+        .iter()
+        .any(|sheet| sheet.id == project.ui_view_state.active_sheet_id)
+    {
+        return Err(ProjectError::InvalidActiveSheet);
+    }
+    crate::schematic_sheet::validate(project).map_err(ProjectError::InvalidSheet)?;
     for sheet in &project.sheets {
         if sheet.components.iter().any(|component| {
             !component.position.x.is_finite()
@@ -191,6 +203,29 @@ mod tests {
     }
 
     #[test]
+    fn multiple_sheets_and_active_selection_round_trip() {
+        let directory = tempfile::tempdir().unwrap();
+        let path = directory.path().join("multi-sheet.sugeda");
+        let mut project = Project::blank("multi-sheet");
+        let second = crate::schematic_sheet::add(&mut project, "Power".into()).unwrap();
+        crate::schematic_sheet::active_mut(&mut project)
+            .unwrap()
+            .components
+            .push(crate::domain::component(
+                crate::domain::ComponentKind::Capacitor,
+                100.0,
+                100.0,
+                "C1",
+                "1u",
+            ));
+        save(&path, &project).unwrap();
+        let reopened = load(&path).unwrap();
+        assert_eq!(reopened.sheets.len(), 2);
+        assert_eq!(reopened.ui_view_state.active_sheet_id, second);
+        assert_eq!(reopened.sheets[1].components[0].spice_ref, "C1");
+    }
+
+    #[test]
     fn rejects_invalid_wire_geometry_before_it_reaches_the_canvas() {
         let mut project = crate::domain::Project::blank("invalid");
         project.sheets[0].wires.push(crate::domain::Wire {
@@ -203,6 +238,16 @@ mod tests {
         assert!(matches!(
             validate(&project),
             Err(ProjectError::InvalidWireGeometry)
+        ));
+    }
+
+    #[test]
+    fn rejects_active_sheet_ids_outside_the_project() {
+        let mut project = Project::blank("invalid active sheet");
+        project.ui_view_state.active_sheet_id = uuid::Uuid::new_v4();
+        assert!(matches!(
+            validate(&project),
+            Err(ProjectError::InvalidActiveSheet)
         ));
     }
 

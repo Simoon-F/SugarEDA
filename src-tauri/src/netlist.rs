@@ -247,10 +247,10 @@ pub fn generate(project: &Project) -> Result<String, Vec<NetlistError>> {
             component_id: None,
         }]
     })?;
-    let sheet = project.sheets.first().ok_or_else(|| {
+    let sheet = crate::schematic_sheet::active(project).map_err(|message| {
         vec![NetlistError {
             code: "no_sheet",
-            message: "Project has no schematic sheet".into(),
+            message,
             component_id: None,
         }]
     })?;
@@ -986,6 +986,18 @@ mod tests {
         assert_eq!(report.checks.len(), 5);
         assert!(report.checks.iter().all(|item| item.passed));
         assert!(report.netlist.is_some());
+    }
+
+    #[test]
+    fn netlist_generation_follows_the_active_sheet() {
+        let mut project = crate::domain::test_rc_project();
+        let first = project.sheets[0].id;
+        let empty = crate::schematic_sheet::add(&mut project, "Empty".into()).unwrap();
+        let errors = generate(&project).unwrap_err();
+        assert!(errors.iter().any(|error| error.code == "missing_ground"));
+        crate::schematic_sheet::select(&mut project, first).unwrap();
+        assert!(generate(&project).is_ok());
+        assert_ne!(first, empty);
     }
     #[test]
     fn open_circuit_is_rejected() {

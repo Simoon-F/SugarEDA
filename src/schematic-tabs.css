@@ -1,0 +1,137 @@
+.schematic-tabs {
+  min-width: 0;
+  height: 39px;
+  display: flex;
+  align-items: flex-end;
+  gap: 7px;
+  padding: 5px 8px 0;
+  background: #e9edf1;
+  border-bottom: 1px solid var(--line-dark);
+}
+.schematic-tab-strip {
+  min-width: 0;
+  display: flex;
+  align-items: flex-end;
+  gap: 3px;
+  overflow-x: auto;
+  scrollbar-width: thin;
+}
+.schematic-tab {
+  flex: 0 0 auto;
+  height: 33px;
+  display: flex;
+  align-items: center;
+  min-width: 125px;
+  max-width: 230px;
+  color: #677681;
+  background: #f2f4f6;
+  border: 1px solid #cdd4da;
+  border-bottom: 0;
+  border-radius: 7px 7px 0 0;
+}
+.schematic-tab.active {
+  color: #174f75;
+  background: #fff;
+  border-color: #9eb5c4;
+  box-shadow: inset 0 2px #2d789f;
+}
+.schematic-tab-select {
+  min-width: 0;
+  height: 100%;
+  flex: 1;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0 7px;
+  color: inherit;
+  background: transparent;
+  border: 0;
+}
+.schematic-tab-select svg {
+  width: 13px;
+  flex: 0 0 auto;
+}
+.schematic-tab-select small {
+  color: #8a98a1;
+  font:
+    7px "SFMono-Regular",
+    monospace;
+}
+.schematic-tab-select span {
+  overflow: hidden;
+  font-size: 9px;
+  font-weight: 700;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.schematic-tab-rename,
+.schematic-tab-close {
+  width: 23px;
+  height: 25px;
+  display: grid;
+  place-items: center;
+  flex: 0 0 auto;
+  color: #7a8993;
+  background: transparent;
+  border: 0;
+  border-radius: 4px;
+}
+.schematic-tab-close {
+  margin-right: 3px;
+}
+.schematic-tab-rename:hover {
+  color: #175e85;
+  background: #edf6fb;
+}
+.schematic-tab-close:hover {
+  color: #a43a45;
+  background: #fff0f1;
+}
+.schematic-tab-rename svg,
+.schematic-tab-close svg {
+  width: 11px;
+}
+.schematic-tab input {
+  width: 145px;
+  height: 25px;
+  margin: 0 5px;
+  padding: 0 6px;
+  color: #173f58;
+  background: #fff;
+  border: 1px solid #4c8dd8;
+  border-radius: 4px;
+  outline: 2px solid rgb(40 105 223 / 12%);
+  font-size: 9px;
+}
+.schematic-tab-add {
+  height: 29px;
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  margin-bottom: 3px;
+  padding: 0 8px;
+  flex: 0 0 auto;
+  color: #245c7b;
+  background: #f7fafc;
+  border: 1px solid #b9cbd6;
+  border-radius: 6px;
+  font-size: 8px;
+  font-weight: 750;
+}
+.schematic-tab-add svg {
+  width: 13px;
+}
+.schematic-tab-summary {
+  height: 28px;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  margin: 0 4px 3px auto;
+  color: #74838d;
+  font-size: 7px;
+  white-space: nowrap;
+}
+.schematic-tab-summary svg {
+  width: 11px;
+  opacity: 0.45;
+}

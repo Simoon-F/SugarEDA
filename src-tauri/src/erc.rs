@@ -111,14 +111,26 @@ fn issue(
 }
 
 pub fn check(project: &Project) -> ErcReport {
-    let Some(sheet) = project.sheets.first() else {
-        return ErcReport {
-            passed: true,
-            issues: vec![],
-            checked_devices: 0,
-            checked_pins: 0,
-        };
+    let mut combined = ErcReport {
+        passed: true,
+        issues: Vec::new(),
+        checked_devices: 0,
+        checked_pins: 0,
     };
+    for sheet in &project.sheets {
+        let report = check_sheet(sheet);
+        combined.issues.extend(report.issues);
+        combined.checked_devices += report.checked_devices;
+        combined.checked_pins += report.checked_pins;
+    }
+    combined.issues.sort_by(|a, b| {
+        (a.device_id, a.pin_id.as_deref(), a.code).cmp(&(b.device_id, b.pin_id.as_deref(), b.code))
+    });
+    combined.passed = combined.issues.is_empty();
+    combined
+}
+
+fn check_sheet(sheet: &crate::domain::SchematicSheet) -> ErcReport {
     let components: Vec<_> = sheet
         .components
         .iter()
@@ -423,6 +435,34 @@ mod tests {
             .issues
             .iter()
             .any(|issue| issue.pin_id.as_deref() == Some("intentional-nc")));
+    }
+
+    #[test]
+    fn aggregates_erc_issues_across_all_sheets() {
+        let mut project = Project::blank("multi-sheet erc");
+        let mut required_a = pin("required-a", 0.0, PinElectricalType::Input);
+        required_a.required = true;
+        project.sheets[0]
+            .components
+            .push(test_component(100.0, vec![required_a]));
+        let second = crate::schematic_sheet::add(&mut project, "IO".into()).unwrap();
+        let mut required_b = pin("required-b", 0.0, PinElectricalType::Input);
+        required_b.required = true;
+        crate::schematic_sheet::active_mut(&mut project)
+            .unwrap()
+            .components
+            .push(test_component(200.0, vec![required_b]));
+        let report = check(&project);
+        assert_eq!(report.checked_devices, 2);
+        assert_eq!(
+            report
+                .issues
+                .iter()
+                .filter(|issue| issue.code == "erc.required_pin_unconnected")
+                .count(),
+            2
+        );
+        assert_eq!(project.ui_view_state.active_sheet_id, second);
     }
 
     #[test]
